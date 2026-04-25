@@ -1,0 +1,164 @@
+/**
+ * PowerBid API — Cloudflare Worker configuration
+ *
+ * Docs:
+ *   https://developers.cloudflare.com/workers/wrangler/configuration/
+ *   https://developers.cloudflare.com/workers/configuration/environments/
+ *
+ * Conventions used here:
+ *   - Top-level keys define the DEFAULT (development) environment.
+ *   - `env.staging` and `env.production` override only what differs.
+ *   - Secrets are NEVER stored in this file — use:
+ *       wrangler secret put <NAME>                 (default env)
+ *       wrangler secret put <NAME> --env production
+ *   - Required secrets: JWT_SECRET
+ *   - Optional secrets: MAILCHANNELS_API_KEY
+ *
+ * Local dev:
+ *   - Put dev-only secrets in apps/api/.dev.vars (already gitignored).
+ *
+ * Deploy:
+ *   wrangler deploy                       # default (dev)
+ *   wrangler deploy --env staging
+ *   wrangler deploy --env production
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+
+  "name": "powerbid-api-dev",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Default to publishing to *.workers.dev for the dev environment.
+  // Production uses a custom route (see env.production).
+  "workers_dev": true,
+  "preview_urls": true,
+
+  // Send unhandled errors / console logs to the Workers dashboard.
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+
+  // Smarter placement: run close to the bound D1 database.
+  "placement": { "mode": "smart" },
+
+  // -------------------------------------------------------------
+  // Bindings (default / dev)
+  // -------------------------------------------------------------
+
+  // D1 — primary relational store
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "powerbid",
+      "database_id": "a13416b4-1fa9-4992-8598-3bbd60eaa8cf",
+      "migrations_dir": "../../migrations"
+    }
+  ],
+
+  // R2 — quotation PDFs and attachments
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "powerbid-files-dev",
+      "preview_bucket_name": "powerbid-files-dev"
+    }
+  ],
+
+  // Browser Rendering — used to generate beautiful PDFs.
+  // Requires Workers Paid plan; enable in dashboard.
+  "browser": { "binding": "BROWSER" },
+
+  // Public, non-secret config. Secrets go via `wrangler secret put`.
+  "vars": {
+    "ENVIRONMENT": "development",
+    "JWT_ISSUER": "powerbid",
+    "APP_URL": "http://localhost:5173",
+    "MAIL_FROM": "no-reply@powerbid.dev",
+    "MAIL_FROM_NAME": "PowerBid (dev)",
+    "ALLOWED_ORIGINS": "http://localhost:5173"
+  },
+
+  // -------------------------------------------------------------
+  // Per-environment overrides
+  // -------------------------------------------------------------
+  "env": {
+    "staging": {
+      "name": "powerbid-api-staging",
+      "workers_dev": true,
+      "observability": { "enabled": true, "head_sampling_rate": 1 },
+      "placement": { "mode": "smart" },
+
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "powerbid-staging",
+          "database_id": "REPLACE_WITH_STAGING_D1_ID",
+          "migrations_dir": "../../migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "FILES",
+          "bucket_name": "powerbid-files-staging"
+        }
+      ],
+      "browser": { "binding": "BROWSER" },
+
+      "vars": {
+        "ENVIRONMENT": "staging",
+        "JWT_ISSUER": "powerbid",
+        "APP_URL": "https://staging.powerbid.example.com",
+        "MAIL_FROM": "no-reply@staging.powerbid.example.com",
+        "MAIL_FROM_NAME": "PowerBid (staging)",
+        "ALLOWED_ORIGINS": "https://staging.powerbid.example.com"
+      }
+    },
+
+    "production": {
+      "name": "powerbid-api",
+      // Production should NOT be reachable on the *.workers.dev subdomain.
+      "workers_dev": false,
+      "observability": { "enabled": true, "head_sampling_rate": 0.1 },
+      "placement": { "mode": "smart" },
+
+      // Custom hostname route — replace with your zone.
+      "routes": [
+        {
+          "pattern": "api.powerbid.example.com/*",
+          "custom_domain": true
+        }
+      ],
+
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "powerbid",
+          "database_id": "REPLACE_WITH_PROD_D1_ID",
+          "migrations_dir": "../../migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "FILES",
+          "bucket_name": "powerbid-files"
+        }
+      ],
+      "browser": { "binding": "BROWSER" },
+
+      "vars": {
+        "ENVIRONMENT": "production",
+        "JWT_ISSUER": "powerbid",
+        "APP_URL": "https://app.powerbid.example.com",
+        "MAIL_FROM": "no-reply@powerbid.example.com",
+        "MAIL_FROM_NAME": "PowerBid",
+        "ALLOWED_ORIGINS": "https://app.powerbid.example.com"
+      },
+
+      // Production limits (defense-in-depth; tune as needed).
+      "limits": { "cpu_ms": 50 }
+    }
+  }
+}
