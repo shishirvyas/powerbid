@@ -212,7 +212,7 @@ export async function POST(req: Request) {
       qty: it.qty,
       price: it.price,
       gstRate: 18,
-      discPct: it.discPct ?? 0,
+      discPct: "discPct" in it ? it.discPct : 0,
     }));
     const calced = calc(lines);
     const [inserted] = await db
