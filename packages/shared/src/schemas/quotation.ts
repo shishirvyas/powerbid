@@ -24,6 +24,9 @@ export const quotationDraftInput = z
     discountValue: z.number().min(0).default(0),
     freightAmount: z.number().min(0).default(0),
     termsConditions: z.string().max(5000).nullable().optional(),
+    paymentTerms: z.string().max(2000).nullable().optional(),
+    deliverySchedule: z.string().max(2000).nullable().optional(),
+    contactPersonId: z.number().int().positive().nullable().optional(),
     notes: z.string().max(2000).nullable().optional(),
     items: z.array(quotationItemInput).min(1, "At least one item is required"),
   })
@@ -50,10 +53,10 @@ export const quotationStatusUpdate = z
 
 export const emailQuotationInput = z
   .object({
-    to: z.string().email(),
+    to: z.string().email().optional(),
     cc: z.string().email().optional(),
-    subject: z.string().min(1).max(300),
-    body: z.string().min(1).max(20000),
+    subject: z.string().min(1).max(300).optional(),
+    body: z.string().min(1).max(20000).optional(),
   })
   .strict();
 export type EmailQuotationInput = z.infer<typeof emailQuotationInput>;

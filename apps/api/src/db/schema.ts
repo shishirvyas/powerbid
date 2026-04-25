@@ -135,6 +135,9 @@ export const quotations = sqliteTable(
     freightAmount: real("freight_amount").notNull().default(0),
     grandTotal: real("grand_total").notNull().default(0),
     termsConditions: text("terms_conditions"),
+    paymentTerms: text("payment_terms"),
+    deliverySchedule: text("delivery_schedule"),
+    contactPersonId: integer("contact_person_id"),
     notes: text("notes"),
     pdfR2Key: text("pdf_r2_key"),
     sentAt: text("sent_at"),
@@ -186,3 +189,38 @@ export const auditLog = sqliteTable("audit_log", {
   payload: text("payload"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const customerContacts = sqliteTable(
+  "customer_contacts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    customerId: integer("customer_id")
+      .notNull()
+      .references(() => customers.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    designation: text("designation"),
+    email: text("email"),
+    phone: text("phone"),
+    isPrimary: integer("is_primary", { mode: "boolean" }).notNull().default(false),
+    ...audit,
+  },
+  (t) => ({ custIdx: index("idx_contacts_customer").on(t.customerId) }),
+);
+
+/**
+ * Generic notes timeline — entity is "customer" | "inquiry" | "quotation".
+ * Kept separate from audit_log so user-authored prose stays distinct from
+ * system-generated activity events.
+ */
+export const notes = sqliteTable(
+  "notes",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    entity: text("entity").notNull(),
+    entityId: integer("entity_id").notNull(),
+    body: text("body").notNull(),
+    createdBy: integer("created_by"),
+    createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (t) => ({ entityIdx: index("idx_notes_entity").on(t.entity, t.entityId) }),
+);

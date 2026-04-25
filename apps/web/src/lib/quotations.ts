@@ -49,6 +49,9 @@ export interface QuotationHead {
   freightAmount: number;
   grandTotal: number;
   termsConditions: string | null;
+  paymentTerms: string | null;
+  deliverySchedule: string | null;
+  contactPersonId: number | null;
   notes: string | null;
   pdfR2Key: string | null;
   sentAt: string | null;
@@ -58,6 +61,16 @@ export interface QuotationDetail {
   quotation: QuotationHead;
   customer: { id: number; name: string; gstin: string | null; email: string | null } | null;
   items: QuotationItem[];
+  email?: { status: string; sentAt?: string | null; error?: string | null } | null;
+}
+
+export interface TimelineEntry {
+  kind: "note" | "activity";
+  id: number;
+  title: string;
+  body: string | null;
+  created_at: string;
+  author: string | null;
 }
 
 export const quotationsApi = {
@@ -95,5 +108,36 @@ export const quotationsApi = {
     api<{ ok: boolean }>(`/api/quotations/${id}/email`, {
       method: "POST",
       body: JSON.stringify(input),
+    }),
+};
+
+export const timelineApi = {
+  list: (entity: "customer" | "inquiry" | "quotation", id: number) =>
+    api<{ items: TimelineEntry[] }>(`/api/${entity}s/${id}/timeline`),
+  addNote: (entity: "customer" | "inquiry" | "quotation", id: number, body: string) =>
+    api<{ id: number }>(`/api/${entity}s/${id}/notes`, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    }),
+};
+
+export const customerContactsApi = {
+  list: (customerId: number) =>
+    api<{ items: Array<{ id: number; name: string; email: string | null; phone: string | null; designation: string | null; isPrimary: boolean }> }>(
+      `/api/customers/${customerId}/contacts`,
+    ),
+};
+
+export function quotationsCsvUrl(status?: string) {
+  const sp = new URLSearchParams();
+  if (status && status !== "all") sp.set("status", status);
+  const qs = sp.toString();
+  return `/api/quotations/export.csv${qs ? `?${qs}` : ""}`;
+}
+
+export const inquiriesApi = {
+  convertToQuotation: (id: number) =>
+    api<{ id: number; quotationNo: string }>(`/api/inquiries/${id}/convert-to-quotation`, {
+      method: "POST",
     }),
 };

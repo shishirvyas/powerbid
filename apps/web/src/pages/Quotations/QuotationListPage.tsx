@@ -1,9 +1,32 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { quotationsApi, type QuotationListItem } from "../../lib/quotations";
+import { quotationsApi, quotationsCsvUrl, type QuotationListItem } from "../../lib/quotations";
 
 const STATUS_TABS = ["all", "draft", "final", "sent", "won", "lost", "expired"] as const;
+
+const BASE = (import.meta as ImportMeta & { env: { VITE_API_BASE_URL?: string } }).env
+  .VITE_API_BASE_URL ?? "";
+
+async function downloadCsv(status: string) {
+  const token = localStorage.getItem("pb_token");
+  const res = await fetch(`${BASE}${quotationsCsvUrl(status)}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    alert("Export failed");
+    return;
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `quotations-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 const statusClasses: Record<string, string> = {
   draft: "bg-slate-100 text-slate-700",
@@ -56,6 +79,13 @@ export function QuotationListPage() {
             {s}
           </button>
         ))}
+        <button
+          onClick={() => downloadCsv(tab)}
+          className="h-8 rounded-full bg-white px-3 text-xs font-medium text-slate-600 ring-1 ring-slate-200 transition hover:ring-slate-300 inline-flex items-center"
+          title="Download as CSV (opens in Excel)"
+        >
+          Export Excel
+        </button>
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}

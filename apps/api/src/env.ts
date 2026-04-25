@@ -13,6 +13,7 @@ export interface Env {
   ENVIRONMENT: "development" | "staging" | "production";
   JWT_ISSUER: string;
   APP_URL: string;
+  API_URL: string;
   MAIL_FROM: string;
   MAIL_FROM_NAME: string;
   ALLOWED_ORIGINS: string; // comma-separated

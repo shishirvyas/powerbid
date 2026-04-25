@@ -41,6 +41,11 @@
     "head_sampling_rate": 1
   },
 
+  // Daily at 10:00 IST (04:30 UTC) to process quotation reminders.
+  "triggers": {
+    "crons": ["30 4 * * *"]
+  },
+
   // Smarter placement: run close to the bound D1 database.
   "placement": { "mode": "smart" },
 
@@ -76,6 +81,7 @@
     "ENVIRONMENT": "development",
     "JWT_ISSUER": "powerbid",
     "APP_URL": "http://localhost:5173",
+    "API_URL": "http://127.0.0.1:8787",
     "MAIL_FROM": "no-reply@powerbid.dev",
     "MAIL_FROM_NAME": "PowerBid (dev)",
     "ALLOWED_ORIGINS": "http://localhost:5173"
@@ -111,6 +117,7 @@
         "ENVIRONMENT": "staging",
         "JWT_ISSUER": "powerbid",
         "APP_URL": "https://staging.powerbid.example.com",
+        "API_URL": "https://api-staging.powerbid.example.com",
         "MAIL_FROM": "no-reply@staging.powerbid.example.com",
         "MAIL_FROM_NAME": "PowerBid (staging)",
         "ALLOWED_ORIGINS": "https://staging.powerbid.example.com"
@@ -152,6 +159,7 @@
         "ENVIRONMENT": "production",
         "JWT_ISSUER": "powerbid",
         "APP_URL": "https://app.powerbid.example.com",
+        "API_URL": "https://api.powerbid.example.com",
         "MAIL_FROM": "no-reply@powerbid.example.com",
         "MAIL_FROM_NAME": "PowerBid",
         "ALLOWED_ORIGINS": "https://app.powerbid.example.com"
