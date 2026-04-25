@@ -1,3 +1,0 @@
-# Local-only secrets used by `wrangler dev`. Do NOT commit real secrets.
-JWT_SECRET = "dev-secret-change-me"
-MAILCHANNELS_API_KEY = ""

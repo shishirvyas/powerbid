@@ -1,0 +1,129 @@
+import { NextRequest } from "next/server";
+import { desc, eq, ilike, or, sql } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { quotations, quotationItems, customers } from "@/lib/db/schema";
+import {
+  ApiError,
+  errorToResponse,
+  jsonOk,
+  parseJson,
+  parseSearch,
+  requireSession,
+} from "@/lib/api";
+import { listQuerySchema, quotationSchema } from "@/lib/schemas";
+import { calcQuotation } from "@/lib/calc";
+
+export const runtime = "nodejs";
+
+async function nextQuotationNo(): Promise<string> {
+  const year = new Date().getFullYear();
+  const prefix = `Q-${year}-`;
+  const rows = await db
+    .select({ max: sql<string | null>`max(${quotations.quotationNo})` })
+    .from(quotations)
+    .where(ilike(quotations.quotationNo, `${prefix}%`));
+  const max = rows[0]?.max ?? null;
+  const lastNum = max ? Number(max.slice(prefix.length)) : 0;
+  const next = String((Number.isFinite(lastNum) ? lastNum : 0) + 1).padStart(4, "0");
+  return `${prefix}${next}`;
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const session = await requireSession();
+    const { q, limit, offset } = parseSearch(new URL(req.url), listQuerySchema);
+    const where = q
+      ? or(
+          ilike(quotations.quotationNo, `%${q}%`),
+          ilike(customers.name, `%${q}%`),
+        )
+      : undefined;
+    const rows = await db
+      .select({
+        id: quotations.id,
+        quotationNo: quotations.quotationNo,
+        quotationDate: quotations.quotationDate,
+        status: quotations.status,
+        currency: quotations.currency,
+        grandTotal: quotations.grandTotal,
+        customerId: quotations.customerId,
+        customerName: customers.name,
+        createdAt: quotations.createdAt,
+      })
+      .from(quotations)
+      .leftJoin(customers, eq(quotations.customerId, customers.id))
+      .where(where)
+      .orderBy(desc(quotations.createdAt))
+      .limit(limit)
+      .offset(offset);
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(quotations)
+      .leftJoin(customers, eq(quotations.customerId, customers.id))
+      .where(where);
+    void session;
+    return jsonOk({ rows, total: count, limit, offset });
+  } catch (err) {
+    return errorToResponse(err);
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const session = await requireSession();
+    const data = await parseJson(req, quotationSchema);
+    const calc = calcQuotation({
+      items: data.items,
+      discountType: data.discountType,
+      discountValue: data.discountValue,
+      freightAmount: data.freightAmount,
+    });
+    const quotationNo = await nextQuotationNo();
+    const [row] = await db
+      .insert(quotations)
+      .values({
+        quotationNo,
+        quotationDate: data.quotationDate,
+        validityDays: data.validityDays,
+        customerId: data.customerId,
+        contactPersonId: data.contactPersonId ?? null,
+        inquiryId: data.inquiryId ?? null,
+        status: data.status,
+        currency: data.currency,
+        discountType: data.discountType,
+        discountValue: String(data.discountValue),
+        discountAmount: String(calc.discountAmount),
+        subtotal: String(calc.subtotal),
+        taxableAmount: String(calc.taxableAmount),
+        gstAmount: String(calc.gstAmount),
+        freightAmount: String(calc.freightAmount),
+        grandTotal: String(calc.grandTotal),
+        termsConditions: data.termsConditions ?? null,
+        paymentTerms: data.paymentTerms ?? null,
+        deliverySchedule: data.deliverySchedule ?? null,
+        notes: data.notes ?? null,
+        createdBy: session.userId,
+        updatedBy: session.userId,
+      })
+      .returning();
+    await db.insert(quotationItems).values(
+      calc.lines.map((l, i) => ({
+        quotationId: row.id,
+        productId: l.productId ?? null,
+        productName: l.productName,
+        unitName: l.unitName ?? null,
+        qty: String(l.qty),
+        unitPrice: String(l.unitPrice),
+        discountPercent: String(l.discountPercent),
+        gstRate: String(l.gstRate),
+        lineSubtotal: String(l.lineSubtotal),
+        lineGst: String(l.lineGst),
+        lineTotal: String(l.lineTotal),
+        sortOrder: i,
+      })),
+    );
+    return jsonOk(row, { status: 201 });
+  } catch (err) {
+    return errorToResponse(err);
+  }
+}
