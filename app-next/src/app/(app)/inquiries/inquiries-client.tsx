@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { PageHeader, EmptyState } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { InquiryStatusBadge, PriorityBadge } from "@/components/status-badges";
@@ -27,9 +26,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Pagination } from "@/components/pagination";
+import { TableSkeleton } from "@/components/table-skeleton";
+import {
+  FormField,
+  getServerFieldErrors,
+  summarizeFieldErrors,
+  useFieldErrors,
+} from "@/components/form-field";
 import { useDebounced, useList, useResource } from "@/lib/hooks";
 import { api, ApiClientError } from "@/lib/api-client";
 import { formatDate } from "@/lib/calc";
+import { cn } from "@/lib/utils";
 
 type InquiryRow = {
   id: number;
@@ -82,11 +90,27 @@ const emptyForm: FormState = {
   items: [{ ...emptyItem }],
 };
 
+const labelMap: Record<string, string> = {
+  customerId: "Customer",
+  customerName: "Customer name",
+  source: "Source",
+  priority: "Priority",
+  status: "Status",
+  requirement: "Requirement",
+  expectedClosure: "Expected closure",
+  items: "Line items",
+};
+
 export function InquiriesClient() {
   const [search, setSearch] = React.useState("");
   const q = useDebounced(search, 300);
-  const { data, loading, error, refresh } = useList<InquiryRow>("/api/inquiries", { q, limit: 100 });
+  const [limit, setLimit] = React.useState(25);
+  const [offset, setOffset] = React.useState(0);
+  React.useEffect(() => {
+    setOffset(0);
+  }, [q, limit]);
 
+  const { data, loading, error, refresh } = useList<InquiryRow>("/api/inquiries", { q, limit, offset });
   const { data: customers } = useList<CustomerOption>("/api/customers", { limit: 200 });
   const { data: products } = useList<ProductOption>("/api/products", { limit: 200 });
 
@@ -144,56 +168,64 @@ export function InquiriesClient() {
           }
         />
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Inquiry</TableHead>
-              <TableHead className="hidden md:table-cell">Date</TableHead>
-              <TableHead>Customer</TableHead>
-              <TableHead className="hidden lg:table-cell">Source</TableHead>
-              <TableHead>Priority</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading && !data ? (
+        <div className="space-y-3">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-8">
-                  Loading...
-                </TableCell>
+                <TableHead>Inquiry</TableHead>
+                <TableHead className="hidden md:table-cell">Date</TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead className="hidden lg:table-cell">Source</TableHead>
+                <TableHead>Priority</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
-            ) : (
-              data?.rows.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell className="font-mono text-xs">{r.inquiryNo}</TableCell>
-                  <TableCell className="hidden md:table-cell text-sm">{formatDate(r.inquiryDate)}</TableCell>
-                  <TableCell className="font-medium">{r.customerName || "—"}</TableCell>
-                  <TableCell className="hidden lg:table-cell text-sm capitalize">{r.source}</TableCell>
-                  <TableCell><PriorityBadge priority={r.priority} /></TableCell>
-                  <TableCell><InquiryStatusBadge status={r.status} /></TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setEditingId(r.id);
-                          setOpen(true);
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => setConfirmDel(r)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {loading && !data ? (
+                <TableSkeleton cols={7} rows={6} />
+              ) : (
+                data?.rows.map((r) => (
+                  <TableRow key={r.id} className="transition-colors hover:bg-muted/40">
+                    <TableCell className="font-mono text-xs">{r.inquiryNo}</TableCell>
+                    <TableCell className="hidden md:table-cell text-sm">{formatDate(r.inquiryDate)}</TableCell>
+                    <TableCell className="font-medium">{r.customerName || "—"}</TableCell>
+                    <TableCell className="hidden lg:table-cell text-sm capitalize">{r.source}</TableCell>
+                    <TableCell><PriorityBadge priority={r.priority} /></TableCell>
+                    <TableCell><InquiryStatusBadge status={r.status} /></TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setEditingId(r.id);
+                            setOpen(true);
+                          }}
+                          aria-label="Edit"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => setConfirmDel(r)} aria-label="Delete">
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+          {data ? (
+            <Pagination
+              total={data.total}
+              limit={limit}
+              offset={offset}
+              onPageChange={setOffset}
+              onLimitChange={setLimit}
+            />
+          ) : null}
+        </div>
       )}
 
       <InquiryFormDialog
@@ -248,10 +280,14 @@ function InquiryFormDialog({
 }) {
   const [form, setForm] = React.useState<FormState>(emptyForm);
   const [saving, setSaving] = React.useState(false);
+  const [itemErrors, setItemErrors] = React.useState<Record<number, string>>({});
+  const { errors, set: setErrors, reset: resetErrors, setOne } = useFieldErrors();
   const { data: full } = useResource<InquiryFull>(open && editingId ? `/api/inquiries/${editingId}` : null);
 
   React.useEffect(() => {
     if (!open) return;
+    resetErrors();
+    setItemErrors({});
     if (editingId && full) {
       setForm({
         customerId: full.customerId ? String(full.customerId) : "",
@@ -274,19 +310,24 @@ function InquiryFormDialog({
     } else if (!editingId) {
       setForm(emptyForm);
     }
-  }, [open, editingId, full]);
+  }, [open, editingId, full, resetErrors]);
+
+  function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+    if (errors[key as string]) setOne(key as string, undefined);
+  }
 
   function updateItem(idx: number, key: keyof typeof emptyItem, value: string) {
     setForm((f) => {
       const items = [...f.items];
       items[idx] = { ...items[idx], [key]: value };
-      // auto-fill product name when product chosen
       if (key === "productId" && value) {
         const p = products.find((x) => String(x.id) === value);
         if (p) items[idx].productName = p.name;
       }
       return { ...f, items };
     });
+    if (itemErrors[idx]) setItemErrors((e) => ({ ...e, [idx]: "" }));
   }
 
   function addItem() {
@@ -296,10 +337,34 @@ function InquiryFormDialog({
     setForm((f) => ({ ...f, items: f.items.filter((_, i) => i !== idx) }));
   }
 
+  function clientValidate(): { fieldErrors: Record<string, string>; itemErrs: Record<number, string> } {
+    const fieldErrors: Record<string, string> = {};
+    if (!form.customerId && !form.customerName.trim()) {
+      fieldErrors.customerName = "Pick a customer or enter a name";
+    }
+    const itemErrs: Record<number, string> = {};
+    form.items.forEach((it, idx) => {
+      if (!it.productName.trim() && (it.productId || it.qty || it.remarks)) {
+        itemErrs[idx] = "Product name is required for non-empty rows";
+      }
+      if (it.qty && (Number.isNaN(Number(it.qty)) || Number(it.qty) < 0)) {
+        itemErrs[idx] = "Enter a valid quantity";
+      }
+    });
+    return { fieldErrors, itemErrs };
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.customerId && !form.customerName.trim()) {
-      toast.error("Pick a customer or enter a customer name");
+    const { fieldErrors, itemErrs } = clientValidate();
+    if (Object.keys(fieldErrors).length || Object.keys(itemErrs).length) {
+      setErrors(fieldErrors);
+      setItemErrors(itemErrs);
+      const allMsgs = [
+        ...Object.entries(fieldErrors).map(([k, v]) => (labelMap[k] ?? k) + ": " + v),
+        ...Object.entries(itemErrs).map(([i, v]) => `Item ${Number(i) + 1}: ${v}`),
+      ];
+      toast.error(allMsgs[0] ?? "Please fix errors");
       return;
     }
     const items = form.items.filter((it) => it.productName.trim());
@@ -329,7 +394,13 @@ function InquiryFormDialog({
       }
       onSaved();
     } catch (err) {
-      toast.error(err instanceof ApiClientError ? err.message : "Save failed");
+      const fe = getServerFieldErrors(err);
+      if (Object.keys(fe).length) {
+        setErrors(fe);
+        toast.error(summarizeFieldErrors(fe, labelMap) ?? "Validation failed");
+      } else {
+        toast.error(err instanceof ApiClientError ? err.message : "Save failed");
+      }
     } finally {
       setSaving(false);
     }
@@ -337,17 +408,19 @@ function InquiryFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editingId ? "Edit inquiry" : "New inquiry"}</DialogTitle>
-          <DialogDescription>Capture customer ask. Items are optional.</DialogDescription>
+          <DialogDescription>
+            Pick a customer or enter a name. Fields marked <span className="text-destructive">*</span> are required.
+          </DialogDescription>
         </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4">
+        <form onSubmit={onSubmit} className="space-y-4" noValidate>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Customer">
+            <FormField label="Customer" error={errors.customerId}>
               <Select
                 value={form.customerId}
-                onChange={(e) => setForm((f) => ({ ...f, customerId: e.target.value }))}
+                onChange={(e) => updateField("customerId", e.target.value)}
               >
                 <option value="">— Free text below —</option>
                 {customers.map((c) => (
@@ -356,18 +429,22 @@ function InquiryFormDialog({
                   </option>
                 ))}
               </Select>
-            </Field>
-            <Field label="Customer name (if not in list)">
+            </FormField>
+            <FormField
+              label="Customer name (if not in list)"
+              required={!form.customerId}
+              error={errors.customerName}
+            >
               <Input
                 value={form.customerName}
-                onChange={(e) => setForm((f) => ({ ...f, customerName: e.target.value }))}
+                onChange={(e) => updateField("customerName", e.target.value)}
                 placeholder="Walk-in / new prospect"
               />
-            </Field>
-            <Field label="Source">
+            </FormField>
+            <FormField label="Source">
               <Select
                 value={form.source}
-                onChange={(e) => setForm((f) => ({ ...f, source: e.target.value as FormState["source"] }))}
+                onChange={(e) => updateField("source", e.target.value as FormState["source"])}
               >
                 <option value="walkin">Walk-in</option>
                 <option value="phone">Phone</option>
@@ -375,22 +452,22 @@ function InquiryFormDialog({
                 <option value="web">Web</option>
                 <option value="other">Other</option>
               </Select>
-            </Field>
-            <Field label="Priority">
+            </FormField>
+            <FormField label="Priority">
               <Select
                 value={form.priority}
-                onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as FormState["priority"] }))}
+                onChange={(e) => updateField("priority", e.target.value as FormState["priority"])}
               >
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
                 <option value="high">High</option>
                 <option value="urgent">Urgent</option>
               </Select>
-            </Field>
-            <Field label="Status">
+            </FormField>
+            <FormField label="Status">
               <Select
                 value={form.status}
-                onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as FormState["status"] }))}
+                onChange={(e) => updateField("status", e.target.value as FormState["status"])}
               >
                 <option value="new">New</option>
                 <option value="in_progress">In progress</option>
@@ -399,83 +476,94 @@ function InquiryFormDialog({
                 <option value="lost">Lost</option>
                 <option value="closed">Closed</option>
               </Select>
-            </Field>
-            <Field label="Expected closure">
+            </FormField>
+            <FormField label="Expected closure" error={errors.expectedClosure}>
               <Input
                 type="date"
                 value={form.expectedClosure}
-                onChange={(e) => setForm((f) => ({ ...f, expectedClosure: e.target.value }))}
+                onChange={(e) => updateField("expectedClosure", e.target.value)}
               />
-            </Field>
-            <Field label="Requirement / notes" className="sm:col-span-2">
+            </FormField>
+            <FormField label="Requirement / notes" className="sm:col-span-2" error={errors.requirement}>
               <Textarea
                 value={form.requirement}
-                onChange={(e) => setForm((f) => ({ ...f, requirement: e.target.value }))}
+                onChange={(e) => updateField("requirement", e.target.value)}
                 rows={3}
               />
-            </Field>
+            </FormField>
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                Line items
-              </Label>
+              <span className="text-xs uppercase tracking-wide text-muted-foreground">Line items</span>
               <Button type="button" variant="outline" size="sm" onClick={addItem}>
                 <Plus className="h-3.5 w-3.5" /> Add item
               </Button>
             </div>
             <div className="space-y-2">
               {form.items.map((it, idx) => (
-                <div key={idx} className="grid gap-2 rounded-md border bg-muted/30 p-3 sm:grid-cols-12">
-                  <div className="sm:col-span-4">
-                    <Select
-                      value={it.productId}
-                      onChange={(e) => updateItem(idx, "productId", e.target.value)}
-                    >
-                      <option value="">— Free text —</option>
-                      {products.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.sku} — {p.name}
-                        </option>
-                      ))}
-                    </Select>
+                <div
+                  key={idx}
+                  className={cn(
+                    "rounded-md border bg-muted/30 p-3",
+                    itemErrors[idx] ? "border-destructive/60" : "",
+                  )}
+                >
+                  <div className="grid gap-2 sm:grid-cols-12">
+                    <div className="sm:col-span-4">
+                      <Select
+                        value={it.productId}
+                        onChange={(e) => updateItem(idx, "productId", e.target.value)}
+                      >
+                        <option value="">— Free text —</option>
+                        {products.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.sku} — {p.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div className="sm:col-span-4">
+                      <Input
+                        placeholder="Product name *"
+                        value={it.productName}
+                        onChange={(e) => updateItem(idx, "productName", e.target.value)}
+                        aria-invalid={!!itemErrors[idx]}
+                        className={itemErrors[idx] ? "border-destructive focus-visible:ring-destructive" : undefined}
+                      />
+                    </div>
+                    <div className="sm:col-span-1">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={it.qty}
+                        onChange={(e) => updateItem(idx, "qty", e.target.value)}
+                        placeholder="Qty"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Input
+                        placeholder="Remarks"
+                        value={it.remarks}
+                        onChange={(e) => updateItem(idx, "remarks", e.target.value)}
+                      />
+                    </div>
+                    <div className="sm:col-span-1 flex items-center justify-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeItem(idx)}
+                        disabled={form.items.length <= 1}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
                   </div>
-                  <div className="sm:col-span-4">
-                    <Input
-                      placeholder="Product name *"
-                      value={it.productName}
-                      onChange={(e) => updateItem(idx, "productName", e.target.value)}
-                    />
-                  </div>
-                  <div className="sm:col-span-1">
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={it.qty}
-                      onChange={(e) => updateItem(idx, "qty", e.target.value)}
-                      placeholder="Qty"
-                    />
-                  </div>
-                  <div className="sm:col-span-2">
-                    <Input
-                      placeholder="Remarks"
-                      value={it.remarks}
-                      onChange={(e) => updateItem(idx, "remarks", e.target.value)}
-                    />
-                  </div>
-                  <div className="sm:col-span-1 flex items-center justify-end">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeItem(idx)}
-                      disabled={form.items.length <= 1}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  </div>
+                  {itemErrors[idx] ? (
+                    <p className="mt-1 text-xs font-medium text-destructive">{itemErrors[idx]}</p>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -492,22 +580,5 @@ function InquiryFormDialog({
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function Field({
-  label,
-  children,
-  className,
-}: {
-  label: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={`space-y-1.5 ${className ?? ""}`}>
-      <Label className="text-xs uppercase tracking-wide text-muted-foreground">{label}</Label>
-      {children}
-    </div>
   );
 }

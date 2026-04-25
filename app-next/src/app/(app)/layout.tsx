@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { Sidebar } from "@/components/sidebar";
 import { Topbar } from "@/components/topbar";
+import { CommandPalette } from "@/components/command-palette";
 
 export default async function AppLayout({
   children,
@@ -24,6 +25,7 @@ export default async function AppLayout({
         />
         <main className="flex-1 p-4 sm:p-6 md:p-8 min-w-0">{children}</main>
       </div>
+      <CommandPalette />
     </div>
   );
 }

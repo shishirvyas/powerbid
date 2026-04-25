@@ -3,7 +3,6 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { LogOut, Search, User } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { MobileNav } from "@/components/sidebar";
@@ -37,13 +36,22 @@ export function Topbar({ user }: { user: User }) {
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-2 sm:gap-4 border-b bg-background/80 backdrop-blur px-4 sm:px-6">
       <MobileNav />
-      <div className="relative flex-1 min-w-0 max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search..."
-          className="pl-9 bg-muted/50 border-transparent focus-visible:bg-background"
-        />
-      </div>
+      <button
+        type="button"
+        onClick={() => {
+          // Synthesize Ctrl+K to open the command palette
+          window.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }),
+          );
+        }}
+        className="group relative flex-1 min-w-0 max-w-md flex items-center gap-2 rounded-md border border-transparent bg-muted/50 px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:border-border transition-colors"
+      >
+        <Search className="h-4 w-4 shrink-0" />
+        <span className="truncate text-left">Search or jump to...</span>
+        <kbd className="ml-auto hidden sm:inline-flex shrink-0 items-center gap-0.5 rounded border bg-background/60 px-1.5 py-0.5 text-[10px] font-mono">
+          <span className="text-[11px]">⌘</span>K
+        </kbd>
+      </button>
       <div className="ml-auto flex items-center gap-1 sm:gap-2 shrink-0">
         <ThemeToggle />
         <DropdownMenu>

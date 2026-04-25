@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { PageHeader, EmptyState } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
@@ -27,6 +26,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Pagination } from "@/components/pagination";
+import { TableSkeleton } from "@/components/table-skeleton";
+import {
+  FormField,
+  getServerFieldErrors,
+  summarizeFieldErrors,
+  useFieldErrors,
+} from "@/components/form-field";
 import { useDebounced, useList, useResource } from "@/lib/hooks";
 import { api, ApiClientError } from "@/lib/api-client";
 import { formatCurrency } from "@/lib/calc";
@@ -76,10 +83,26 @@ const empty: ProductForm = {
   isActive: true,
 };
 
+const labelMap: Record<string, string> = {
+  sku: "SKU",
+  name: "Name",
+  description: "Description",
+  brandId: "Brand",
+  unitId: "Unit",
+  gstSlabId: "GST slab",
+  basePrice: "Base price",
+};
+
 export function ProductsClient() {
   const [search, setSearch] = React.useState("");
   const q = useDebounced(search, 300);
-  const { data, loading, error, refresh } = useList<Product>("/api/products", { q, limit: 100 });
+  const [limit, setLimit] = React.useState(25);
+  const [offset, setOffset] = React.useState(0);
+  React.useEffect(() => {
+    setOffset(0);
+  }, [q, limit]);
+
+  const { data, loading, error, refresh } = useList<Product>("/api/products", { q, limit, offset });
   const { data: masters } = useResource<Masters>("/api/masters");
 
   const [open, setOpen] = React.useState(false);
@@ -136,68 +159,75 @@ export function ProductsClient() {
           }
         />
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>SKU</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead className="hidden md:table-cell">Brand</TableHead>
-              <TableHead className="hidden md:table-cell">Unit</TableHead>
-              <TableHead className="hidden lg:table-cell">GST</TableHead>
-              <TableHead className="text-right">Base price</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading && !data ? (
+        <div className="space-y-3">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-8">
-                  Loading...
-                </TableCell>
+                <TableHead>SKU</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead className="hidden md:table-cell">Brand</TableHead>
+                <TableHead className="hidden md:table-cell">Unit</TableHead>
+                <TableHead className="hidden lg:table-cell">GST</TableHead>
+                <TableHead className="text-right">Base price</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
-            ) : (
-              data?.rows.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-mono text-xs">{p.sku}</TableCell>
-                  <TableCell className="font-medium">{p.name}</TableCell>
-                  <TableCell className="hidden md:table-cell text-sm">{p.brandName || "—"}</TableCell>
-                  <TableCell className="hidden md:table-cell text-sm">{p.unitCode || "—"}</TableCell>
-                  <TableCell className="hidden lg:table-cell text-sm">
-                    {p.gstName ? `${p.gstName} (${p.gstRate}%)` : "—"}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatCurrency(p.basePrice)}</TableCell>
-                  <TableCell>
-                    <Badge variant={p.isActive ? "success" : "muted"}>
-                      {p.isActive ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setEditing(p);
-                          setOpen(true);
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setConfirmDel(p)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {loading && !data ? (
+                <TableSkeleton cols={8} rows={6} />
+              ) : (
+                data?.rows.map((p) => (
+                  <TableRow key={p.id} className="transition-colors hover:bg-muted/40">
+                    <TableCell className="font-mono text-xs">{p.sku}</TableCell>
+                    <TableCell className="font-medium">{p.name}</TableCell>
+                    <TableCell className="hidden md:table-cell text-sm">{p.brandName || "—"}</TableCell>
+                    <TableCell className="hidden md:table-cell text-sm">{p.unitCode || "—"}</TableCell>
+                    <TableCell className="hidden lg:table-cell text-sm">
+                      {p.gstName ? `${p.gstName} (${p.gstRate}%)` : "—"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{formatCurrency(p.basePrice)}</TableCell>
+                    <TableCell>
+                      <Badge variant={p.isActive ? "success" : "muted"}>
+                        {p.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setEditing(p);
+                            setOpen(true);
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setConfirmDel(p)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+          {data ? (
+            <Pagination
+              total={data.total}
+              limit={limit}
+              offset={offset}
+              onPageChange={setOffset}
+              onLimitChange={setLimit}
+            />
+          ) : null}
+        </div>
       )}
 
       <ProductFormDialog
@@ -249,9 +279,11 @@ function ProductFormDialog({
 }) {
   const [form, setForm] = React.useState<ProductForm>(empty);
   const [saving, setSaving] = React.useState(false);
+  const { errors, set: setErrors, reset: resetErrors, setOne } = useFieldErrors();
 
   React.useEffect(() => {
     if (open) {
+      resetErrors();
       setForm(
         editing
           ? {
@@ -267,12 +299,31 @@ function ProductFormDialog({
           : empty,
       );
     }
-  }, [open, editing]);
+  }, [open, editing, resetErrors]);
+
+  function update<K extends keyof ProductForm>(key: K, value: ProductForm[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+    if (errors[key as string]) setOne(key as string, undefined);
+  }
+
+  function clientValidate(): Record<string, string> {
+    const next: Record<string, string> = {};
+    if (!form.sku.trim()) next.sku = "SKU is required";
+    if (!form.name.trim()) next.name = "Name is required";
+    if (form.basePrice === "" || Number.isNaN(Number(form.basePrice))) {
+      next.basePrice = "Enter a valid base price";
+    } else if (Number(form.basePrice) < 0) {
+      next.basePrice = "Base price cannot be negative";
+    }
+    return next;
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.sku.trim() || !form.name.trim()) {
-      toast.error("SKU and name are required");
+    const clientErrs = clientValidate();
+    if (Object.keys(clientErrs).length) {
+      setErrors(clientErrs);
+      toast.error(summarizeFieldErrors(clientErrs, labelMap) ?? "Please complete required fields");
       return;
     }
     setSaving(true);
@@ -294,9 +345,16 @@ function ProductFormDialog({
         await api("/api/products", { method: "POST", json: payload });
         toast.success("Product created");
       }
+      resetErrors();
       onSaved();
     } catch (err) {
-      toast.error(err instanceof ApiClientError ? err.message : "Save failed");
+      const fe = getServerFieldErrors(err);
+      if (Object.keys(fe).length) {
+        setErrors(fe);
+        toast.error(summarizeFieldErrors(fe, labelMap) ?? "Validation failed");
+      } else {
+        toast.error(err instanceof ApiClientError ? err.message : "Save failed");
+      }
     } finally {
       setSaving(false);
     }
@@ -304,33 +362,23 @@ function ProductFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editing ? "Edit product" : "New product"}</DialogTitle>
-          <DialogDescription>Required fields are marked with *.</DialogDescription>
+          <DialogDescription>
+            Fields marked <span className="text-destructive">*</span> are required.
+          </DialogDescription>
         </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4">
+        <form onSubmit={onSubmit} className="space-y-4" noValidate>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="SKU *">
-              <Input
-                value={form.sku}
-                onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))}
-                required
-                maxLength={80}
-              />
-            </Field>
-            <Field label="Name *">
-              <Input
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                required
-              />
-            </Field>
-            <Field label="Brand">
-              <Select
-                value={form.brandId}
-                onChange={(e) => setForm((f) => ({ ...f, brandId: e.target.value }))}
-              >
+            <FormField label="SKU" required error={errors.sku}>
+              <Input value={form.sku} onChange={(e) => update("sku", e.target.value)} maxLength={80} />
+            </FormField>
+            <FormField label="Name" required error={errors.name}>
+              <Input value={form.name} onChange={(e) => update("name", e.target.value)} />
+            </FormField>
+            <FormField label="Brand" error={errors.brandId}>
+              <Select value={form.brandId} onChange={(e) => update("brandId", e.target.value)}>
                 <option value="">—</option>
                 {masters?.brands.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -338,12 +386,9 @@ function ProductFormDialog({
                   </option>
                 ))}
               </Select>
-            </Field>
-            <Field label="Unit">
-              <Select
-                value={form.unitId}
-                onChange={(e) => setForm((f) => ({ ...f, unitId: e.target.value }))}
-              >
+            </FormField>
+            <FormField label="Unit" error={errors.unitId}>
+              <Select value={form.unitId} onChange={(e) => update("unitId", e.target.value)}>
                 <option value="">—</option>
                 {masters?.units.map((u) => (
                   <option key={u.id} value={u.id}>
@@ -351,12 +396,9 @@ function ProductFormDialog({
                   </option>
                 ))}
               </Select>
-            </Field>
-            <Field label="GST slab">
-              <Select
-                value={form.gstSlabId}
-                onChange={(e) => setForm((f) => ({ ...f, gstSlabId: e.target.value }))}
-              >
+            </FormField>
+            <FormField label="GST slab" error={errors.gstSlabId}>
+              <Select value={form.gstSlabId} onChange={(e) => update("gstSlabId", e.target.value)}>
                 <option value="">—</option>
                 {masters?.gstSlabs.map((g) => (
                   <option key={g.id} value={g.id}>
@@ -364,33 +406,32 @@ function ProductFormDialog({
                   </option>
                 ))}
               </Select>
-            </Field>
-            <Field label="Base price (INR) *">
+            </FormField>
+            <FormField label="Base price (INR)" required error={errors.basePrice}>
               <Input
                 type="number"
                 step="0.01"
                 min="0"
                 value={form.basePrice}
-                onChange={(e) => setForm((f) => ({ ...f, basePrice: e.target.value }))}
-                required
+                onChange={(e) => update("basePrice", e.target.value)}
               />
-            </Field>
-            <Field label="Status">
+            </FormField>
+            <FormField label="Status">
               <Select
                 value={form.isActive ? "1" : "0"}
-                onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.value === "1" }))}
+                onChange={(e) => update("isActive", e.target.value === "1")}
               >
                 <option value="1">Active</option>
                 <option value="0">Inactive</option>
               </Select>
-            </Field>
-            <Field label="Description" className="sm:col-span-2">
+            </FormField>
+            <FormField label="Description" className="sm:col-span-2" error={errors.description}>
               <Textarea
                 value={form.description}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                onChange={(e) => update("description", e.target.value)}
                 rows={3}
               />
-            </Field>
+            </FormField>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
@@ -403,22 +444,5 @@ function ProductFormDialog({
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function Field({
-  label,
-  children,
-  className,
-}: {
-  label: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={`space-y-1.5 ${className ?? ""}`}>
-      <Label className="text-xs uppercase tracking-wide text-muted-foreground">{label}</Label>
-      {children}
-    </div>
   );
 }

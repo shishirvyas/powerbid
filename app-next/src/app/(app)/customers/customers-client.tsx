@@ -6,8 +6,8 @@ import { toast } from "sonner";
 import { PageHeader, EmptyState } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -26,6 +26,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Pagination } from "@/components/pagination";
+import { TableSkeleton } from "@/components/table-skeleton";
+import {
+  FormField,
+  getServerFieldErrors,
+  summarizeFieldErrors,
+  useFieldErrors,
+} from "@/components/form-field";
 import { useDebounced, useList } from "@/lib/hooks";
 import { api, ApiClientError } from "@/lib/api-client";
 
@@ -67,10 +75,38 @@ const empty: Partial<Customer> = {
   isActive: true,
 };
 
+const labelMap: Record<string, string> = {
+  code: "Code",
+  name: "Name",
+  email: "Email",
+  contactPerson: "Contact person",
+  phone: "Phone",
+  gstin: "GSTIN",
+  pan: "PAN",
+  addressLine1: "Address line 1",
+  addressLine2: "Address line 2",
+  city: "City",
+  state: "State",
+  pincode: "Pincode",
+  country: "Country",
+  notes: "Notes",
+};
+
 export function CustomersClient() {
   const [search, setSearch] = React.useState("");
   const q = useDebounced(search, 300);
-  const { data, loading, error, refresh } = useList<Customer>("/api/customers", { q, limit: 100 });
+  const [limit, setLimit] = React.useState(25);
+  const [offset, setOffset] = React.useState(0);
+
+  React.useEffect(() => {
+    setOffset(0);
+  }, [q, limit]);
+
+  const { data, loading, error, refresh } = useList<Customer>("/api/customers", {
+    q,
+    limit,
+    offset,
+  });
 
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Customer | null>(null);
@@ -126,58 +162,65 @@ export function CustomersClient() {
           }
         />
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Code</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead className="hidden md:table-cell">Contact</TableHead>
-              <TableHead className="hidden lg:table-cell">Phone</TableHead>
-              <TableHead className="hidden xl:table-cell">City</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading && !data ? (
+        <div className="space-y-3">
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-8">
-                  Loading...
-                </TableCell>
+                <TableHead>Code</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead className="hidden md:table-cell">Contact</TableHead>
+                <TableHead className="hidden lg:table-cell">Phone</TableHead>
+                <TableHead className="hidden xl:table-cell">City</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
-            ) : (
-              data?.rows.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell className="font-mono text-xs">{c.code}</TableCell>
-                  <TableCell className="font-medium">{c.name}</TableCell>
-                  <TableCell className="hidden md:table-cell text-sm">{c.contactPerson || "—"}</TableCell>
-                  <TableCell className="hidden lg:table-cell text-sm">{c.phone || "—"}</TableCell>
-                  <TableCell className="hidden xl:table-cell text-sm">{c.city || "—"}</TableCell>
-                  <TableCell>
-                    <Badge variant={c.isActive ? "success" : "muted"}>
-                      {c.isActive ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(c)} aria-label="Edit">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setConfirmDel(c)}
-                        aria-label="Delete"
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {loading && !data ? (
+                <TableSkeleton cols={7} rows={6} />
+              ) : (
+                data?.rows.map((c) => (
+                  <TableRow key={c.id} className="transition-colors hover:bg-muted/40">
+                    <TableCell className="font-mono text-xs">{c.code}</TableCell>
+                    <TableCell className="font-medium">{c.name}</TableCell>
+                    <TableCell className="hidden md:table-cell text-sm">{c.contactPerson || "—"}</TableCell>
+                    <TableCell className="hidden lg:table-cell text-sm">{c.phone || "—"}</TableCell>
+                    <TableCell className="hidden xl:table-cell text-sm">{c.city || "—"}</TableCell>
+                    <TableCell>
+                      <Badge variant={c.isActive ? "success" : "muted"}>
+                        {c.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => openEdit(c)} aria-label="Edit">
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setConfirmDel(c)}
+                          aria-label="Delete"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+          {data ? (
+            <Pagination
+              total={data.total}
+              limit={limit}
+              offset={offset}
+              onPageChange={setOffset}
+              onLimitChange={setLimit}
+            />
+          ) : null}
+        </div>
       )}
 
       <CustomerFormDialog
@@ -226,9 +269,11 @@ function CustomerFormDialog({
 }) {
   const [form, setForm] = React.useState<Partial<Customer>>(empty);
   const [saving, setSaving] = React.useState(false);
+  const { errors, set: setErrors, reset: resetErrors, setOne } = useFieldErrors();
 
   React.useEffect(() => {
     if (open) {
+      resetErrors();
       setForm(
         editing
           ? {
@@ -248,16 +293,32 @@ function CustomerFormDialog({
           : empty,
       );
     }
-  }, [open, editing]);
+  }, [open, editing, resetErrors]);
 
   function update<K extends keyof Customer>(key: K, value: Customer[K] | string | boolean) {
     setForm((f) => ({ ...f, [key]: value }));
+    if (errors[key as string]) setOne(key as string, undefined);
+  }
+
+  function clientValidate(): Record<string, string> {
+    const next: Record<string, string> = {};
+    if (!form.code?.trim()) next.code = "Code is required";
+    if (!form.name?.trim()) next.name = "Name is required";
+    if (form.email && form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())) {
+      next.email = "Enter a valid email";
+    }
+    if (form.country && form.country.length > 2) {
+      next.country = "Use a 2-letter country code";
+    }
+    return next;
   }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.code?.trim() || !form.name?.trim()) {
-      toast.error("Code and name are required");
+    const clientErrs = clientValidate();
+    if (Object.keys(clientErrs).length) {
+      setErrors(clientErrs);
+      toast.error(summarizeFieldErrors(clientErrs, labelMap) ?? "Please complete required fields");
       return;
     }
     setSaving(true);
@@ -269,9 +330,16 @@ function CustomerFormDialog({
         await api("/api/customers", { method: "POST", json: form });
         toast.success("Customer created");
       }
+      resetErrors();
       onSaved();
     } catch (err) {
-      toast.error(err instanceof ApiClientError ? err.message : "Save failed");
+      const fieldErrs = getServerFieldErrors(err);
+      if (Object.keys(fieldErrs).length) {
+        setErrors(fieldErrs);
+        toast.error(summarizeFieldErrors(fieldErrs, labelMap) ?? "Validation failed");
+      } else {
+        toast.error(err instanceof ApiClientError ? err.message : "Save failed");
+      }
     } finally {
       setSaving(false);
     }
@@ -279,115 +347,105 @@ function CustomerFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editing ? "Edit customer" : "New customer"}</DialogTitle>
-          <DialogDescription>Required fields are marked with *.</DialogDescription>
+          <DialogDescription>
+            Fields marked <span className="text-destructive">*</span> are required.
+          </DialogDescription>
         </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4">
+        <form onSubmit={onSubmit} className="space-y-4" noValidate>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Code *">
+            <FormField label="Code" required error={errors.code}>
               <Input
                 value={form.code ?? ""}
                 onChange={(e) => update("code", e.target.value)}
                 placeholder="ACME001"
-                required
                 maxLength={50}
               />
-            </Field>
-            <Field label="Name *">
+            </FormField>
+            <FormField label="Name" required error={errors.name}>
               <Input
                 value={form.name ?? ""}
                 onChange={(e) => update("name", e.target.value)}
                 placeholder="Acme Industries"
-                required
               />
-            </Field>
-            <Field label="Contact person">
+            </FormField>
+            <FormField label="Contact person" error={errors.contactPerson}>
               <Input
                 value={form.contactPerson ?? ""}
                 onChange={(e) => update("contactPerson", e.target.value)}
               />
-            </Field>
-            <Field label="Email">
+            </FormField>
+            <FormField label="Email" error={errors.email}>
               <Input
                 type="email"
                 value={form.email ?? ""}
                 onChange={(e) => update("email", e.target.value)}
               />
-            </Field>
-            <Field label="Phone">
+            </FormField>
+            <FormField label="Phone" error={errors.phone}>
               <Input
                 value={form.phone ?? ""}
                 onChange={(e) => update("phone", e.target.value)}
               />
-            </Field>
-            <Field label="GSTIN">
+            </FormField>
+            <FormField label="GSTIN" error={errors.gstin}>
               <Input
                 value={form.gstin ?? ""}
                 onChange={(e) => update("gstin", e.target.value)}
               />
-            </Field>
-            <Field label="PAN">
+            </FormField>
+            <FormField label="PAN" error={errors.pan}>
               <Input
                 value={form.pan ?? ""}
                 onChange={(e) => update("pan", e.target.value)}
               />
-            </Field>
-            <Field label="Country">
+            </FormField>
+            <FormField label="Country" error={errors.country} hint="2-letter ISO code">
               <Input
                 value={form.country ?? "IN"}
                 onChange={(e) => update("country", e.target.value)}
                 maxLength={2}
               />
-            </Field>
-            <Field label="Address line 1" className="sm:col-span-2">
+            </FormField>
+            <FormField label="Address line 1" className="sm:col-span-2" error={errors.addressLine1}>
               <Input
                 value={form.addressLine1 ?? ""}
                 onChange={(e) => update("addressLine1", e.target.value)}
               />
-            </Field>
-            <Field label="Address line 2" className="sm:col-span-2">
+            </FormField>
+            <FormField label="Address line 2" className="sm:col-span-2" error={errors.addressLine2}>
               <Input
                 value={form.addressLine2 ?? ""}
                 onChange={(e) => update("addressLine2", e.target.value)}
               />
-            </Field>
-            <Field label="City">
-              <Input
-                value={form.city ?? ""}
-                onChange={(e) => update("city", e.target.value)}
-              />
-            </Field>
-            <Field label="State">
-              <Input
-                value={form.state ?? ""}
-                onChange={(e) => update("state", e.target.value)}
-              />
-            </Field>
-            <Field label="Pincode">
-              <Input
-                value={form.pincode ?? ""}
-                onChange={(e) => update("pincode", e.target.value)}
-              />
-            </Field>
-            <Field label="Status">
-              <select
+            </FormField>
+            <FormField label="City" error={errors.city}>
+              <Input value={form.city ?? ""} onChange={(e) => update("city", e.target.value)} />
+            </FormField>
+            <FormField label="State" error={errors.state}>
+              <Input value={form.state ?? ""} onChange={(e) => update("state", e.target.value)} />
+            </FormField>
+            <FormField label="Pincode" error={errors.pincode}>
+              <Input value={form.pincode ?? ""} onChange={(e) => update("pincode", e.target.value)} />
+            </FormField>
+            <FormField label="Status">
+              <Select
                 value={form.isActive ? "1" : "0"}
                 onChange={(e) => update("isActive", e.target.value === "1")}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
                 <option value="1">Active</option>
                 <option value="0">Inactive</option>
-              </select>
-            </Field>
-            <Field label="Notes" className="sm:col-span-2">
+              </Select>
+            </FormField>
+            <FormField label="Notes" className="sm:col-span-2" error={errors.notes}>
               <Textarea
                 value={form.notes ?? ""}
                 onChange={(e) => update("notes", e.target.value)}
                 rows={3}
               />
-            </Field>
+            </FormField>
           </div>
 
           <DialogFooter>
@@ -401,22 +459,5 @@ function CustomerFormDialog({
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function Field({
-  label,
-  children,
-  className,
-}: {
-  label: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={`space-y-1.5 ${className ?? ""}`}>
-      <Label className="text-xs uppercase tracking-wide text-muted-foreground">{label}</Label>
-      {children}
-    </div>
   );
 }
