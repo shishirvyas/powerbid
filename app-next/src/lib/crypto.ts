@@ -8,12 +8,15 @@ const KEY_LEN = 32;
 function b64(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString("base64");
 }
-function fromB64(s: string): Uint8Array {
-  return new Uint8Array(Buffer.from(s, "base64"));
+function fromB64(s: string): Uint8Array<ArrayBuffer> {
+  const buf = Buffer.from(s, "base64");
+  const out = new Uint8Array(new ArrayBuffer(buf.length));
+  out.set(buf);
+  return out;
 }
 
 export async function hashPassword(password: string): Promise<string> {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const salt = crypto.getRandomValues(new Uint8Array(new ArrayBuffer(16)));
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(password),
