@@ -15,6 +15,25 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useList, useResource } from "@/lib/hooks";
 import { api, ApiClientError } from "@/lib/api-client";
 import { calcQuotation, formatCurrency } from "@/lib/calc";
+import { cn } from "@/lib/utils";
+import {
+  RequiredStar,
+  getServerFieldErrors,
+  summarizeFieldErrors,
+  useFieldErrors,
+} from "@/components/form-field";
+
+const labelMap: Record<string, string> = {
+  customerId: "Customer",
+  quotationDate: "Date",
+  validityDays: "Validity",
+  status: "Status",
+  currency: "Currency",
+  discountType: "Discount type",
+  discountValue: "Discount value",
+  freightAmount: "Freight",
+  items: "Line items",
+};
 
 type CustomerOption = { id: number; code: string; name: string };
 type ProductOption = {
@@ -87,6 +106,8 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
   const router = useRouter();
   const [form, setForm] = React.useState<QuotationBuilderInitial>(initial);
   const [saving, setSaving] = React.useState(false);
+  const { errors, set: setErrors, setOne } = useFieldErrors();
+  const [itemErrors, setItemErrors] = React.useState<Record<number, Record<string, string>>>({});
 
   const { data: customers } = useList<CustomerOption>("/api/customers", { limit: 200 });
   const { data: products } = useList<ProductOption>("/api/products", { limit: 200 });
@@ -123,6 +144,16 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
       }
       return { ...f, items };
     });
+    if (itemErrors[idx]?.[key]) {
+      setItemErrors((e) => {
+        const copy = { ...e };
+        const row = { ...(copy[idx] ?? {}) };
+        delete row[key];
+        if (Object.keys(row).length === 0) delete copy[idx];
+        else copy[idx] = row;
+        return copy;
+      });
+    }
   }
   function addItem() {
     setForm((f) => ({
@@ -145,16 +176,49 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
     setForm((f) => ({ ...f, items: f.items.filter((_, i) => i !== idx) }));
   }
 
+  function clientValidate(): { fieldErrors: Record<string, string>; itemErrs: Record<number, Record<string, string>> } {
+    const fieldErrors: Record<string, string> = {};
+    if (!form.customerId) fieldErrors.customerId = "Pick a customer";
+    if (!form.quotationDate) fieldErrors.quotationDate = "Date is required";
+    if (!form.currency || form.currency.length !== 3) fieldErrors.currency = "3-letter currency code (e.g. INR)";
+    const validity = Number(form.validityDays);
+    if (Number.isNaN(validity) || validity < 0 || validity > 365) fieldErrors.validityDays = "0–365";
+
+    const itemErrs: Record<number, Record<string, string>> = {};
+    const nonEmpty = form.items.filter((it) => it.productName.trim() || it.productId);
+    if (nonEmpty.length === 0) {
+      fieldErrors.items = "Add at least one line item";
+    }
+    form.items.forEach((it, idx) => {
+      const row: Record<string, string> = {};
+      const isUsed = !!(it.productName.trim() || it.productId);
+      if (isUsed && !it.productName.trim()) row.productName = "Required";
+      const qty = Number(it.qty);
+      if (isUsed && (Number.isNaN(qty) || qty <= 0)) row.qty = "> 0";
+      const price = Number(it.unitPrice);
+      if (isUsed && (Number.isNaN(price) || price < 0)) row.unitPrice = "≥ 0";
+      const disc = Number(it.discountPercent);
+      if (isUsed && (Number.isNaN(disc) || disc < 0 || disc > 100)) row.discountPercent = "0–100";
+      const gst = Number(it.gstRate);
+      if (isUsed && (Number.isNaN(gst) || gst < 0 || gst > 100)) row.gstRate = "0–100";
+      if (Object.keys(row).length) itemErrs[idx] = row;
+    });
+    return { fieldErrors, itemErrs };
+  }
+
   async function onSave(redirect: boolean) {
-    if (!form.customerId) {
-      toast.error("Pick a customer");
+    const { fieldErrors, itemErrs } = clientValidate();
+    if (Object.keys(fieldErrors).length || Object.keys(itemErrs).length) {
+      setErrors(fieldErrors);
+      setItemErrors(itemErrs);
+      const summary = summarizeFieldErrors(fieldErrors, labelMap);
+      const itemSummary = Object.keys(itemErrs).length
+        ? `Item ${Number(Object.keys(itemErrs)[0]) + 1} has errors`
+        : null;
+      toast.error(summary ?? itemSummary ?? "Please fix the highlighted fields");
       return;
     }
     const items = form.items.filter((it) => it.productName.trim());
-    if (items.length === 0) {
-      toast.error("Add at least one line item");
-      return;
-    }
     setSaving(true);
     const payload = {
       quotationDate: form.quotationDate,
@@ -191,7 +255,30 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
         if (redirect) router.push(`/quotations/${created.id}`);
       }
     } catch (err) {
-      toast.error(err instanceof ApiClientError ? err.message : "Save failed");
+      const fe = getServerFieldErrors(err);
+      if (Object.keys(fe).length) {
+        // Server may return nested item paths like "items.0.qty" — pull those into itemErrors
+        const flatField: Record<string, string> = {};
+        const itemErrs: Record<number, Record<string, string>> = {};
+        for (const [key, msg] of Object.entries(fe)) {
+          if (!msg) continue;
+          const m = key.match(/^items\.(\d+)\.(.+)$/);
+          if (m) {
+            const i = Number(m[1]);
+            (itemErrs[i] ??= {})[m[2]!] = msg;
+          } else {
+            flatField[key] = msg;
+          }
+        }
+        setErrors(flatField);
+        setItemErrors(itemErrs);
+        toast.error(
+          summarizeFieldErrors(flatField, labelMap) ??
+            (Object.keys(itemErrs).length ? `Item ${Number(Object.keys(itemErrs)[0]) + 1} has errors` : "Validation failed"),
+        );
+      } else {
+        toast.error(err instanceof ApiClientError ? err.message : "Save failed");
+      }
     } finally {
       setSaving(false);
     }
@@ -221,12 +308,15 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
           <CardTitle className="text-base">Header</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Field label="Customer *">
+          <Field label="Customer" required error={errors.customerId}>
             <Select
               value={form.customerId ? String(form.customerId) : ""}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, customerId: e.target.value ? Number(e.target.value) : null }))
-              }
+              onChange={(e) => {
+                setForm((f) => ({ ...f, customerId: e.target.value ? Number(e.target.value) : null }));
+                if (errors.customerId) setOne("customerId", undefined);
+              }}
+              aria-invalid={!!errors.customerId}
+              className={errors.customerId ? "border-destructive focus-visible:ring-destructive" : undefined}
             >
               <option value="">— Select —</option>
               {customers?.rows.map((c) => (
@@ -236,20 +326,30 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
               ))}
             </Select>
           </Field>
-          <Field label="Date">
+          <Field label="Date" required error={errors.quotationDate}>
             <Input
               type="date"
               value={form.quotationDate}
-              onChange={(e) => setForm((f) => ({ ...f, quotationDate: e.target.value }))}
+              onChange={(e) => {
+                setForm((f) => ({ ...f, quotationDate: e.target.value }));
+                if (errors.quotationDate) setOne("quotationDate", undefined);
+              }}
+              aria-invalid={!!errors.quotationDate}
+              className={errors.quotationDate ? "border-destructive focus-visible:ring-destructive" : undefined}
             />
           </Field>
-          <Field label="Validity (days)">
+          <Field label="Validity (days)" error={errors.validityDays}>
             <Input
               type="number"
               min={0}
               max={365}
               value={form.validityDays}
-              onChange={(e) => setForm((f) => ({ ...f, validityDays: Number(e.target.value) || 0 }))}
+              onChange={(e) => {
+                setForm((f) => ({ ...f, validityDays: Number(e.target.value) || 0 }));
+                if (errors.validityDays) setOne("validityDays", undefined);
+              }}
+              aria-invalid={!!errors.validityDays}
+              className={errors.validityDays ? "border-destructive focus-visible:ring-destructive" : undefined}
             />
           </Field>
           <Field label="Status">
@@ -265,19 +365,29 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
               <option value="cancelled">Cancelled</option>
             </Select>
           </Field>
-          <Field label="Currency">
+          <Field label="Currency" required error={errors.currency}>
             <Input
               value={form.currency}
-              onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value.toUpperCase().slice(0, 3) }))}
+              onChange={(e) => {
+                setForm((f) => ({ ...f, currency: e.target.value.toUpperCase().slice(0, 3) }));
+                if (errors.currency) setOne("currency", undefined);
+              }}
               maxLength={3}
+              aria-invalid={!!errors.currency}
+              className={errors.currency ? "border-destructive focus-visible:ring-destructive" : undefined}
             />
           </Field>
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className={errors.items ? "border-destructive/60" : undefined}>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle className="text-base">Line items</CardTitle>
+          <div>
+            <CardTitle className="text-base">Line items<RequiredStar /></CardTitle>
+            {errors.items ? (
+              <p className="mt-1 text-xs font-medium text-destructive">{errors.items}</p>
+            ) : null}
+          </div>
           <Button type="button" size="sm" variant="outline" onClick={addItem}>
             <Plus className="h-4 w-4" /> Add row
           </Button>
@@ -285,8 +395,16 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
         <CardContent className="space-y-3">
           {form.items.map((it, idx) => {
             const line = calc.lines[idx];
+            const ie = itemErrors[idx] ?? {};
+            const hasErr = Object.keys(ie).length > 0;
             return (
-              <div key={idx} className="grid gap-2 rounded-md border bg-muted/30 p-3 lg:grid-cols-12">
+              <div
+                key={idx}
+                className={cn(
+                  "grid gap-2 rounded-md border bg-muted/30 p-3 lg:grid-cols-12",
+                  hasErr ? "border-destructive/60" : "",
+                )}
+              >
                 <div className="lg:col-span-3">
                   <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Product</Label>
                   <Select
@@ -302,11 +420,16 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
                   </Select>
                 </div>
                 <div className="lg:col-span-3">
-                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Name *</Label>
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Name<RequiredStar />
+                  </Label>
                   <Input
                     value={it.productName}
                     onChange={(e) => updateItem(idx, "productName", e.target.value)}
+                    aria-invalid={!!ie.productName}
+                    className={ie.productName ? "border-destructive focus-visible:ring-destructive" : undefined}
                   />
+                  {ie.productName ? <p className="mt-0.5 text-[11px] font-medium text-destructive">{ie.productName}</p> : null}
                 </div>
                 <div className="lg:col-span-1">
                   <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Qty</Label>
@@ -316,7 +439,10 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
                     step="0.01"
                     value={it.qty}
                     onChange={(e) => updateItem(idx, "qty", e.target.value)}
+                    aria-invalid={!!ie.qty}
+                    className={ie.qty ? "border-destructive focus-visible:ring-destructive" : undefined}
                   />
+                  {ie.qty ? <p className="mt-0.5 text-[11px] font-medium text-destructive">{ie.qty}</p> : null}
                 </div>
                 <div className="lg:col-span-2">
                   <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Unit price</Label>
@@ -326,7 +452,10 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
                     step="0.01"
                     value={it.unitPrice}
                     onChange={(e) => updateItem(idx, "unitPrice", e.target.value)}
+                    aria-invalid={!!ie.unitPrice}
+                    className={ie.unitPrice ? "border-destructive focus-visible:ring-destructive" : undefined}
                   />
+                  {ie.unitPrice ? <p className="mt-0.5 text-[11px] font-medium text-destructive">{ie.unitPrice}</p> : null}
                 </div>
                 <div className="lg:col-span-1">
                   <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Disc %</Label>
@@ -337,7 +466,10 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
                     step="0.01"
                     value={it.discountPercent}
                     onChange={(e) => updateItem(idx, "discountPercent", e.target.value)}
+                    aria-invalid={!!ie.discountPercent}
+                    className={ie.discountPercent ? "border-destructive focus-visible:ring-destructive" : undefined}
                   />
+                  {ie.discountPercent ? <p className="mt-0.5 text-[11px] font-medium text-destructive">{ie.discountPercent}</p> : null}
                 </div>
                 <div className="lg:col-span-1">
                   <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">GST %</Label>
@@ -348,7 +480,10 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
                     step="0.01"
                     value={it.gstRate}
                     onChange={(e) => updateItem(idx, "gstRate", e.target.value)}
+                    aria-invalid={!!ie.gstRate}
+                    className={ie.gstRate ? "border-destructive focus-visible:ring-destructive" : undefined}
                   />
+                  {ie.gstRate ? <p className="mt-0.5 text-[11px] font-medium text-destructive">{ie.gstRate}</p> : null}
                 </div>
                 <div className="lg:col-span-1 flex items-end justify-between gap-2">
                   <div className="text-right text-sm tabular-nums">
@@ -483,15 +618,23 @@ function Field({
   label,
   children,
   className,
+  required,
+  error,
 }: {
   label: string;
   children: React.ReactNode;
   className?: string;
+  required?: boolean;
+  error?: string;
 }) {
   return (
     <div className={`space-y-1.5 ${className ?? ""}`}>
-      <Label className="text-xs uppercase tracking-wide text-muted-foreground">{label}</Label>
+      <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+        {label}
+        {required ? <RequiredStar /> : null}
+      </Label>
       {children}
+      {error ? <p className="text-xs font-medium text-destructive">{error}</p> : null}
     </div>
   );
 }
