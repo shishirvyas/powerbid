@@ -72,9 +72,8 @@
     }
   ],
 
-  // Browser Rendering — used to generate beautiful PDFs.
-  // Requires Workers Paid plan; enable in dashboard.
-  "browser": { "binding": "BROWSER" },
+  // Browser Rendering binding is intentionally omitted in default/local dev.
+  // It is enabled in staging/production env blocks below.
 
   // Public, non-secret config. Secrets go via `wrangler secret put`.
   "vars": {
@@ -143,7 +142,7 @@
         {
           "binding": "DB",
           "database_name": "powerbid",
-          "database_id": "REPLACE_WITH_PROD_D1_ID",
+          "database_id": "a13416b4-1fa9-4992-8598-3bbd60eaa8cf",
           "migrations_dir": "../../migrations"
         }
       ],

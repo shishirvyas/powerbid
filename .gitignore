@@ -19,3 +19,7 @@ coverage/
 .idea/
 apps/web/dist/
 apps/api/dist/
+
+# Local-only help page (contains plaintext secrets)
+help-powerbid.html
+

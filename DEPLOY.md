@@ -23,10 +23,10 @@
 pnpm install
 
 # 1.1 D1 database — already provisioned for this repo:
-#     id = a13416b4-1fa9-4992-8598-3bbd60eaa8cf  (already in apps/api/wrangler.toml)
+#     id = a13416b4-1fa9-4992-8598-3bbd60eaa8cf  (already in apps/api/wrangler.jsonc)
 # To create a new one for a fresh environment:
 # wrangler d1 create powerbid
-# Copy the printed database_id into apps/api/wrangler.toml under [[d1_databases]].
+# Copy the printed database_id into apps/api/wrangler.jsonc under d1_databases.
 
 # 1.2 R2 bucket
 wrangler r2 bucket create powerbid-files
@@ -56,7 +56,7 @@ For **email deliverability** (MailChannels):
 2. Add the **Domain Lockdown** TXT record per [MailChannels docs](https://support.mailchannels.com/hc/en-us/articles/16918954360845).
 3. Add DKIM (recommended) per provider docs.
 
-Update `apps/api/wrangler.toml` `[vars]`:
+Update apps/api/wrangler.jsonc vars:
 
 ```toml
 APP_URL = "https://app.powerbid.example.com"

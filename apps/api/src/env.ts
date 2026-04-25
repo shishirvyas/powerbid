@@ -7,7 +7,7 @@ export interface Env {
   // R2 bucket for PDFs / attachments
   FILES: R2Bucket;
   // Browser Rendering (PDF generation)
-  BROWSER: Fetcher;
+  BROWSER?: Fetcher;
 
   // Vars
   ENVIRONMENT: "development" | "staging" | "production";
@@ -21,4 +21,5 @@ export interface Env {
   // Secrets
   JWT_SECRET: string;
   MAILCHANNELS_API_KEY?: string;
+  SEED_KEY?: string;
 }

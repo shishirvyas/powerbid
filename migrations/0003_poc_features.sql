@@ -48,9 +48,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity, entity_id);
 
 -- ---------- New columns on quotations ----------
--- ALTER TABLE ADD COLUMN is idempotent-safe via "IF NOT EXISTS" in SQLite ≥ 3.37.
--- Cloudflare D1 uses SQLite 3.46+, so this is safe.
-ALTER TABLE quotations ADD COLUMN IF NOT EXISTS payment_terms      TEXT;
-ALTER TABLE quotations ADD COLUMN IF NOT EXISTS delivery_schedule  TEXT;
-ALTER TABLE quotations ADD COLUMN IF NOT EXISTS contact_person_id  INTEGER;
-ALTER TABLE quotations ADD COLUMN IF NOT EXISTS validity_days      INTEGER NOT NULL DEFAULT 30;
+-- Use plain ADD COLUMN for maximum compatibility with local Wrangler SQLite.
+ALTER TABLE quotations ADD COLUMN payment_terms      TEXT;
+ALTER TABLE quotations ADD COLUMN delivery_schedule  TEXT;
+ALTER TABLE quotations ADD COLUMN contact_person_id  INTEGER;

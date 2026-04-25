@@ -10,6 +10,7 @@ import { inquiriesRoutes } from "./modules/inquiries/inquiries.routes";
 import { quotationEmailPublicRoutes } from "./modules/quotations/quotation-email.public.routes";
 import { quotationsRoutes } from "./modules/quotations/quotations.routes";
 import { dashboardRoutes } from "./modules/dashboard/dashboard.routes";
+import { adminRoutes } from "./modules/admin/admin.routes";
 import { errorHandler } from "./middleware/error";
 import { runQuotationReminderCron } from "./modules/quotations/quotation-email.service";
 import { ensurePocTables } from "./lib/bootstrap";
@@ -46,6 +47,7 @@ app.route("/api/inquiries", inquiriesRoutes);
 app.route("/api/email-events", quotationEmailPublicRoutes);
 app.route("/api/quotations", quotationsRoutes);
 app.route("/api/dashboard", dashboardRoutes);
+app.route("/api/admin", adminRoutes);
 
 app.notFound((c) => c.json({ error: "Not found", code: "not_found" }, 404));
 app.onError(errorHandler);
