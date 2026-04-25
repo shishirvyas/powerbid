@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ZodError, type ZodSchema } from "zod";
+import { ZodError, type ZodTypeAny, type z } from "zod";
 import { getSession, type SessionPayload } from "@/lib/auth";
 
 export type ApiContext = { session: SessionPayload };
@@ -49,7 +49,10 @@ export function errorToResponse(err: unknown): Response {
   return jsonError(500, message);
 }
 
-export async function parseJson<T>(req: Request, schema: ZodSchema<T>): Promise<T> {
+export async function parseJson<S extends ZodTypeAny>(
+  req: Request,
+  schema: S,
+): Promise<z.infer<S>> {
   let body: unknown;
   try {
     body = await req.json();
@@ -59,7 +62,7 @@ export async function parseJson<T>(req: Request, schema: ZodSchema<T>): Promise<
   return schema.parse(body);
 }
 
-export function parseSearch<T>(url: URL, schema: ZodSchema<T>): T {
+export function parseSearch<S extends ZodTypeAny>(url: URL, schema: S): z.infer<S> {
   const obj: Record<string, string> = {};
   for (const [k, v] of url.searchParams.entries()) obj[k] = v;
   return schema.parse(obj);
