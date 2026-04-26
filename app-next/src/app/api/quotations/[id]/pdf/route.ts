@@ -162,10 +162,8 @@ async function drawHeader(
     logoBlockBottom = HEADER_TOP - 38 - isoSize - 3;
   }
 
-  // ── company info block (right of logo) — credentials + address ──
-  if (COMPANY_CREDENTIALS[0]) page.drawText(COMPANY_CREDENTIALS[0], { x: logoRightX, y: HEADER_TOP - 8, size: 8, font: sans, color: rgb(0.38, 0.42, 0.5) });
-  if (COMPANY_CREDENTIALS[1]) page.drawText(COMPANY_CREDENTIALS[1], { x: logoRightX, y: HEADER_TOP - 20, size: 8, font: sans, color: rgb(0.38, 0.42, 0.5) });
-  page.drawText(COMPANY_ADDRESS, { x: logoRightX, y: HEADER_TOP - 32, size: 7.5, font: sans, color: rgb(0.38, 0.42, 0.5) });
+  // ── company credentials/address intentionally omitted from header (shown in footer) ──
+  void logoRightX;
   void logoBlockBottom;
 
   // ── ref / date / label (right block) ──
