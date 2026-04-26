@@ -127,27 +127,46 @@ async function drawHeader(
   const { sans, sansBold } = fonts;
   const x0 = MARGIN_X;
 
-  // ── logo ──
+  // ── logo (top) with "Engineering & Technologies" + ISO caption directly beneath ──
+  const SUBTITLE = "Engineering & Technologies";
+  const ISO_LINE = COMPANY_TAGLINE; // "An ISO 9001:2015 Certified Company"
+  const subtitleSize = 11;
+  const isoSize = 8;
+  const subtitleW = sansBold.widthOfTextAtSize(SUBTITLE, subtitleSize);
+  const isoW = sans.widthOfTextAtSize(ISO_LINE, isoSize);
   let logoRightX = x0;
+  let logoBlockBottom = HEADER_TOP;
   if (logoImage) {
-    const maxW = 120;
-    const maxH = 52;
+    const maxW = 130;
+    const maxH = 44;
     const scale = Math.min(maxW / logoImage.width, maxH / logoImage.height);
     const dw = logoImage.width * scale;
     const dh = logoImage.height * scale;
-    page.drawImage(logoImage, { x: x0, y: HEADER_TOP - dh, width: dw, height: dh });
-    logoRightX = x0 + dw + 14;
+    // Center captions under the logo
+    const blockW = Math.max(dw, subtitleW, isoW);
+    const logoX = x0 + (blockW - dw) / 2;
+    page.drawImage(logoImage, { x: logoX, y: HEADER_TOP - dh, width: dw, height: dh });
+    const subtitleX = x0 + (blockW - subtitleW) / 2;
+    const subtitleY = HEADER_TOP - dh - subtitleSize - 1;
+    page.drawText(SUBTITLE, { x: subtitleX, y: subtitleY, size: subtitleSize, font: sansBold, color: rgb(0.08, 0.12, 0.22) });
+    const isoX = x0 + (blockW - isoW) / 2;
+    const isoY = subtitleY - isoSize - 2;
+    page.drawText(ISO_LINE, { x: isoX, y: isoY, size: isoSize, font: sans, color: rgb(0.32, 0.38, 0.46) });
+    logoRightX = x0 + blockW + 18;
+    logoBlockBottom = isoY;
   } else {
     page.drawText("LAN", { x: x0, y: HEADER_TOP - 22, size: 30, font: sansBold, color: rgb(0.1, 0.19, 0.36) });
-    logoRightX = x0 + 78;
+    page.drawText(SUBTITLE, { x: x0, y: HEADER_TOP - 38, size: subtitleSize, font: sansBold, color: rgb(0.08, 0.12, 0.22) });
+    page.drawText(ISO_LINE, { x: x0, y: HEADER_TOP - 38 - isoSize - 3, size: isoSize, font: sans, color: rgb(0.32, 0.38, 0.46) });
+    logoRightX = x0 + Math.max(78, subtitleW, isoW) + 18;
+    logoBlockBottom = HEADER_TOP - 38 - isoSize - 3;
   }
 
-  // ── company block ──
-  page.drawText(COMPANY_NAME, { x: logoRightX, y: HEADER_TOP - 4, size: 13, font: sansBold, color: rgb(0.08, 0.12, 0.22) });
-  page.drawText(COMPANY_TAGLINE, { x: logoRightX, y: HEADER_TOP - 18, size: 8.5, font: sans, color: rgb(0.32, 0.38, 0.46) });
-  if (COMPANY_CREDENTIALS[0]) page.drawText(COMPANY_CREDENTIALS[0], { x: logoRightX, y: HEADER_TOP - 30, size: 8, font: sans, color: rgb(0.38, 0.42, 0.5) });
-  if (COMPANY_CREDENTIALS[1]) page.drawText(COMPANY_CREDENTIALS[1], { x: logoRightX, y: HEADER_TOP - 41, size: 8, font: sans, color: rgb(0.38, 0.42, 0.5) });
-  page.drawText(COMPANY_ADDRESS, { x: logoRightX, y: HEADER_TOP - 52, size: 7.5, font: sans, color: rgb(0.38, 0.42, 0.5) });
+  // ── company info block (right of logo) — credentials + address ──
+  if (COMPANY_CREDENTIALS[0]) page.drawText(COMPANY_CREDENTIALS[0], { x: logoRightX, y: HEADER_TOP - 8, size: 8, font: sans, color: rgb(0.38, 0.42, 0.5) });
+  if (COMPANY_CREDENTIALS[1]) page.drawText(COMPANY_CREDENTIALS[1], { x: logoRightX, y: HEADER_TOP - 20, size: 8, font: sans, color: rgb(0.38, 0.42, 0.5) });
+  page.drawText(COMPANY_ADDRESS, { x: logoRightX, y: HEADER_TOP - 32, size: 7.5, font: sans, color: rgb(0.38, 0.42, 0.5) });
+  void logoBlockBottom;
 
   // ── ref / date / label (right block) ──
   const rx = PW - MARGIN_X - 155;
