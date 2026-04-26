@@ -1,8 +1,8 @@
 {
-  "name": "powerbid",
+  "name": "bid",
   "version": "0.1.0",
   "private": true,
-  "description": "PowerBid - quotation and inquiry management (Next.js + Neon)",
+  "description": "BID - LAN quotation and inquiry management (Next.js + Neon)",
   "packageManager": "pnpm@9.12.0",
   "engines": {
     "node": ">=20.10.0",

@@ -1,4 +1,4 @@
-# PowerBid start script — frees port 3000 then launches Next.js dev server.
+# BID start script — frees port 3000 then launches Next.js dev server.
 # Usage:
 #   .\scripts\start.ps1            # start dev server in current window
 #   .\scripts\start.ps1 -Detached  # start in a new window
@@ -42,7 +42,7 @@ function Stop-PortProcess {
     }
 }
 
-Write-Host "PowerBid · start" -ForegroundColor Cyan
+Write-Host "BID · start" -ForegroundColor Cyan
 Write-Host "  repo : $root"
 Write-Host "  app  : $appDir"
 Write-Host "  port : $Port"
@@ -93,7 +93,7 @@ if ($Seed) {
         return
     }
     $envFile = Join-Path $appDir '.env.local'
-    $seedKey = 'powerbid-demo'
+    $seedKey = 'bid-demo'
     if (Test-Path $envFile) {
         $line = Select-String -Path $envFile -Pattern '^SEED_KEY=' -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($line) { $seedKey = ($line.Line -split '=',2)[1].Trim().Trim('"') }

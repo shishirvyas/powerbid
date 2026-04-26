@@ -42,7 +42,17 @@ export function handleApi<T>(fn: (ctx: ApiContext) => Promise<T>): () => Promise
 
 export function errorToResponse(err: unknown): Response {
   if (err instanceof ApiError) return jsonError(err.status, err.message, err.details);
-  if (err instanceof ZodError) return jsonError(400, "Validation failed", err.flatten());
+  if (err instanceof ZodError) {
+    const flattened = err.flatten();
+    return jsonError(400, "Validation failed", {
+      fieldErrors: flattened.fieldErrors,
+      formErrors: flattened.formErrors,
+      issues: err.issues.map((issue) => ({
+        path: issue.path.join("."),
+        message: issue.message,
+      })),
+    });
+  }
   // eslint-disable-next-line no-console
   console.error("[api]", err);
   const message = err instanceof Error ? err.message : "Internal Server Error";

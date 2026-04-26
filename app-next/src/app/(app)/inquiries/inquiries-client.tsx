@@ -25,6 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { AttachmentsPanel, uploadEntityAttachments } from "@/components/attachments-panel";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Pagination } from "@/components/pagination";
 import { TableSkeleton } from "@/components/table-skeleton";
@@ -279,6 +280,7 @@ function InquiryFormDialog({
   onSaved: () => void;
 }) {
   const [form, setForm] = React.useState<FormState>(emptyForm);
+  const [pendingAttachments, setPendingAttachments] = React.useState<File[]>([]);
   const [saving, setSaving] = React.useState(false);
   const [itemErrors, setItemErrors] = React.useState<Record<number, string>>({});
   const { errors, set: setErrors, reset: resetErrors, setOne } = useFieldErrors();
@@ -288,6 +290,7 @@ function InquiryFormDialog({
     if (!open) return;
     resetErrors();
     setItemErrors({});
+    setPendingAttachments([]);
     if (editingId && full) {
       setForm({
         customerId: full.customerId ? String(full.customerId) : "",
@@ -385,12 +388,20 @@ function InquiryFormDialog({
       })),
     };
     try {
+      let entityId = editingId;
       if (editingId) {
         await api(`/api/inquiries/${editingId}`, { method: "PUT", json: payload });
         toast.success("Inquiry updated");
+        entityId = editingId;
       } else {
-        await api("/api/inquiries", { method: "POST", json: payload });
+        const created = await api<{ id: number }>("/api/inquiries", { method: "POST", json: payload });
         toast.success("Inquiry created");
+        entityId = created.id;
+      }
+      if (entityId && pendingAttachments.length) {
+        await uploadEntityAttachments("inquiries", entityId, pendingAttachments);
+        setPendingAttachments([]);
+        toast.success(`${pendingAttachments.length} attachment${pendingAttachments.length > 1 ? "s" : ""} uploaded`);
       }
       onSaved();
     } catch (err) {
@@ -567,6 +578,17 @@ function InquiryFormDialog({
                 </div>
               ))}
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-xs uppercase tracking-wide text-muted-foreground">Attachments</div>
+            <AttachmentsPanel
+              entityType="inquiries"
+              entityId={editingId ?? undefined}
+              pendingFiles={pendingAttachments}
+              onPendingFilesChange={setPendingAttachments}
+              emptyMessage="Add multiple inquiry files here. They will upload after the first successful save."
+            />
           </div>
 
           <DialogFooter>

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Plus, Send, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -28,8 +28,9 @@ import {
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { api, ApiClientError } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
+import { APP_NAME, COMPANY_NAME } from "@/lib/branding";
 
-type Tab = "brands" | "units" | "gst";
+type Tab = "brands" | "units" | "gst" | "communications";
 
 type Brand = { id: number; name: string; isActive: boolean };
 type Unit = { id: number; code: string; name: string; isActive: boolean };
@@ -48,18 +49,20 @@ export function SettingsClient() {
         <TabBtn current={tab} setCurrent={setTab} value="brands" label="Brands" />
         <TabBtn current={tab} setCurrent={setTab} value="units" label="Units" />
         <TabBtn current={tab} setCurrent={setTab} value="gst" label="GST slabs" />
+        <TabBtn current={tab} setCurrent={setTab} value="communications" label="Communications" />
       </div>
 
       {tab === "brands" ? <BrandsPanel /> : null}
       {tab === "units" ? <UnitsPanel /> : null}
       {tab === "gst" ? <GstPanel /> : null}
+      {tab === "communications" ? <CommunicationsPanel /> : null}
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">About</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          PowerBid · Quotation Suite. Master data drives product pricing and quotation tax.
+          {APP_NAME} · {COMPANY_NAME}. Master data drives product pricing and quotation tax.
         </CardContent>
       </Card>
     </div>
@@ -498,6 +501,243 @@ function GstPanel() {
         }}
       />
     </MasterPanel>
+  );
+}
+
+type CommTemplate = {
+  id: number;
+  channel: "email" | "whatsapp";
+  templateKey: string;
+  name: string;
+  subject: string | null;
+  body: string;
+  isActive: boolean;
+};
+
+function CommunicationsPanel() {
+  const [rows, setRows] = React.useState<CommTemplate[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [savingChannel, setSavingChannel] = React.useState<"email" | "whatsapp" | null>(null);
+  const [testTo, setTestTo] = React.useState("");
+  const [testing, setTesting] = React.useState(false);
+  const [emailTemplate, setEmailTemplate] = React.useState({ name: "Quotation Email", subject: "Quotation {{referenceNo}}", body: "" });
+  const [waTemplate, setWaTemplate] = React.useState({ name: "Quotation WhatsApp", body: "" });
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await api<Listing<CommTemplate>>("/api/settings/communications");
+      setRows(r.rows);
+      const email = r.rows.find((x) => x.channel === "email" && x.templateKey === "quotation_send");
+      const wa = r.rows.find((x) => x.channel === "whatsapp" && x.templateKey === "quotation_send");
+      setEmailTemplate({
+        name: email?.name || "Quotation Email",
+        subject: email?.subject || "Quotation {{referenceNo}}",
+        body: email?.body || "Dear {{customerName}},\n\nPlease find attached quotation {{referenceNo}}.\n\nRegards,\nBID",
+      });
+      setWaTemplate({
+        name: wa?.name || "Quotation WhatsApp",
+        body: wa?.body || "Dear {{customerName}}, please find quotation {{referenceNo}}. PDF: {{pdfUrl}}",
+      });
+    } catch (e) {
+      toast.error(e instanceof ApiClientError ? e.message : "Failed to load communication settings");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    load();
+  }, [load]);
+
+  async function saveEmailTemplate() {
+    try {
+      setSavingChannel("email");
+      await api("/api/settings/communications", {
+        method: "PUT",
+        json: {
+          channel: "email",
+          templateKey: "quotation_send",
+          name: emailTemplate.name,
+          subject: emailTemplate.subject,
+          body: emailTemplate.body,
+          isActive: true,
+        },
+      });
+      toast.success("Email template saved");
+      load();
+    } catch (e) {
+      toast.error(e instanceof ApiClientError ? e.message : "Save failed");
+    } finally {
+      setSavingChannel(null);
+    }
+  }
+
+  async function saveWaTemplate() {
+    try {
+      setSavingChannel("whatsapp");
+      await api("/api/settings/communications", {
+        method: "PUT",
+        json: {
+          channel: "whatsapp",
+          templateKey: "quotation_send",
+          name: waTemplate.name,
+          subject: null,
+          body: waTemplate.body,
+          isActive: true,
+        },
+      });
+      toast.success("WhatsApp template saved");
+      load();
+    } catch (e) {
+      toast.error(e instanceof ApiClientError ? e.message : "Save failed");
+    } finally {
+      setSavingChannel(null);
+    }
+  }
+
+  async function testSmtp() {
+    if (!testTo.trim()) {
+      toast.error("Enter a recipient email");
+      return;
+    }
+    try {
+      setTesting(true);
+      await api("/api/settings/communications/smtp-test", {
+        method: "POST",
+        json: { to: testTo.trim() },
+      });
+      toast.success("SMTP test email sent");
+    } catch (e) {
+      toast.error(e instanceof ApiClientError ? e.message : "SMTP test failed");
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="py-6 text-sm text-muted-foreground">Loading...</CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Template variables</CardTitle>
+        </CardHeader>
+        <CardContent className="text-xs text-muted-foreground">
+          Use placeholders: {"{{customerName}}"}, {"{{quotationNo}}"}, {"{{referenceNo}}"}, {"{{projectName}}"}, {"{{pdfUrl}}"}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Email quotation template</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>Template name</Label>
+            <Input value={emailTemplate.name} onChange={(e) => setEmailTemplate((f) => ({ ...f, name: e.target.value }))} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Subject</Label>
+            <Input value={emailTemplate.subject} onChange={(e) => setEmailTemplate((f) => ({ ...f, subject: e.target.value }))} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Body</Label>
+            <textarea
+              className="min-h-36 w-full rounded-md border bg-background px-3 py-2 text-sm"
+              value={emailTemplate.body}
+              onChange={(e) => setEmailTemplate((f) => ({ ...f, body: e.target.value }))}
+            />
+          </div>
+          <div>
+            <Button onClick={saveEmailTemplate} disabled={savingChannel !== null}>
+              {savingChannel === "email" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Save email template
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">WhatsApp quotation template</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>Template name</Label>
+            <Input value={waTemplate.name} onChange={(e) => setWaTemplate((f) => ({ ...f, name: e.target.value }))} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Body</Label>
+            <textarea
+              className="min-h-28 w-full rounded-md border bg-background px-3 py-2 text-sm"
+              value={waTemplate.body}
+              onChange={(e) => setWaTemplate((f) => ({ ...f, body: e.target.value }))}
+            />
+          </div>
+          <div>
+            <Button onClick={saveWaTemplate} disabled={savingChannel !== null}>
+              {savingChannel === "whatsapp" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Save WhatsApp template
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">SMTP test</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>Recipient email</Label>
+            <Input value={testTo} onChange={(e) => setTestTo(e.target.value)} placeholder="name@company.com" />
+          </div>
+          <div>
+            <Button variant="outline" onClick={testSmtp} disabled={testing}>
+              {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Send test email
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Active templates</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {rows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No templates saved yet. Defaults are currently in use.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Channel</TableHead>
+                  <TableHead>Key</TableHead>
+                  <TableHead>Name</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="capitalize">{r.channel}</TableCell>
+                    <TableCell>{r.templateKey}</TableCell>
+                    <TableCell>{r.name}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

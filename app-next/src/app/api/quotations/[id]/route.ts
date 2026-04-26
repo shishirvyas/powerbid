@@ -65,7 +65,12 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
     const [row] = await db
       .update(quotations)
       .set({
+        referenceNo: data.referenceNo ?? null,
         quotationDate: data.quotationDate,
+        subject: data.subject ?? null,
+        projectName: data.projectName ?? null,
+        customerAttention: data.customerAttention ?? null,
+        introText: data.introText ?? null,
         validityDays: data.validityDays,
         customerId: data.customerId,
         contactPersonId: data.contactPersonId ?? null,
@@ -84,6 +89,12 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
         paymentTerms: data.paymentTerms ?? null,
         deliverySchedule: data.deliverySchedule ?? null,
         notes: data.notes ?? null,
+        signatureMode: data.signatureMode ?? null,
+        signatureData: data.signatureData ?? null,
+        signatureName: data.signatureName ?? null,
+        signatureDesignation: data.signatureDesignation ?? null,
+        signatureMobile: data.signatureMobile ?? null,
+        signatureEmail: data.signatureEmail ?? null,
         updatedBy: session.userId,
         updatedAt: new Date(),
       })
@@ -97,6 +108,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
         productId: l.productId ?? null,
         productName: l.productName,
         unitName: l.unitName ?? null,
+        qtyBreakup: l.qtyBreakup ?? null,
         qty: String(l.qty),
         unitPrice: String(l.unitPrice),
         discountPercent: String(l.discountPercent),

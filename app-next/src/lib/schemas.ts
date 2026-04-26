@@ -4,7 +4,7 @@ const optionalString = z
   .string()
   .trim()
   .max(500)
-  .optional()
+  .nullish()
   .transform((v) => (v ? v : null));
 
 const requiredString = (label: string, max = 200) =>
@@ -78,6 +78,12 @@ export const quotationItemSchema = z.object({
   productId: z.coerce.number().int().positive().nullable().optional(),
   productName: requiredString("Product"),
   unitName: optionalString,
+  qtyBreakup: z
+    .string()
+    .trim()
+    .max(2000)
+    .nullish()
+    .transform((v) => (v ? v : null)),
   qty: z.coerce.number().nonnegative().default(1),
   unitPrice: z.coerce.number().nonnegative().default(0),
   discountPercent: z.coerce.number().min(0).max(100).default(0),
@@ -85,10 +91,15 @@ export const quotationItemSchema = z.object({
 });
 
 export const quotationSchema = z.object({
+  referenceNo: optionalString,
   quotationDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD")
     .default(() => new Date().toISOString().slice(0, 10)),
+  subject: optionalString,
+  projectName: optionalString,
+  customerAttention: optionalString,
+  introText: optionalString,
   validityDays: z.coerce.number().int().min(0).max(365).default(15),
   customerId: z.coerce.number().int().positive(),
   contactPersonId: z.coerce.number().int().positive().nullable().optional(),
@@ -104,10 +115,40 @@ export const quotationSchema = z.object({
   paymentTerms: optionalString,
   deliverySchedule: optionalString,
   notes: optionalString,
+  signatureMode: z.enum(["upload", "draw", "typed"]).nullable().optional(),
+  signatureData: z.string().trim().max(1000000).nullable().optional(),
+  signatureName: optionalString,
+  signatureDesignation: optionalString,
+  signatureMobile: optionalString,
+  signatureEmail: z.string().email().optional().or(z.literal("")).transform((v) => v || null),
   items: z.array(quotationItemSchema).min(1, "Add at least one line item"),
 });
 export type QuotationInput = z.infer<typeof quotationSchema>;
 export type QuotationItemInput = z.infer<typeof quotationItemSchema>;
+
+export const quotationDispatchSchema = z.object({
+  channel: z.enum(["email", "whatsapp"]),
+  to: z.string().trim().min(1, "Recipient is required").max(120),
+  subject: z.string().trim().max(200).optional(),
+  message: z.string().trim().max(5000).optional(),
+  attachPdf: z.boolean().optional().default(true),
+});
+export type QuotationDispatchInput = z.infer<typeof quotationDispatchSchema>;
+
+export const communicationTemplateSchema = z.object({
+  channel: z.enum(["email", "whatsapp"]),
+  templateKey: z.string().trim().min(1).max(50).default("quotation_send"),
+  name: z.string().trim().min(1).max(120),
+  subject: z.string().trim().max(200).optional().or(z.literal("")).transform((v) => v || null),
+  body: z.string().trim().min(1).max(5000),
+  isActive: z.boolean().default(true),
+});
+export type CommunicationTemplateInput = z.infer<typeof communicationTemplateSchema>;
+
+export const smtpTestSchema = z.object({
+  to: z.string().email(),
+});
+export type SmtpTestInput = z.infer<typeof smtpTestSchema>;
 
 /* ------------------------------ masters -------------------------------- */
 export const brandSchema = z.object({

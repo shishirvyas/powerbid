@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BID Project Help</title>
+  <style>
+    :root {
+      --bg: #f4f6fb;
+      --card: #ffffff;
+      --ink: #0f172a;
+      --muted: #475569;
+      --line: #dbe3ef;
+      --brand: #0b5fff;
+      --ok: #0f766e;
+      --warn: #b45309;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--ink);
+      background: radial-gradient(circle at top right, #eaf1ff, var(--bg));
+      line-height: 1.45;
+    }
+    .wrap {
+      max-width: 980px;
+      margin: 28px auto;
+      padding: 0 16px;
+    }
+    h1, h2, h3 { margin: 0 0 10px; }
+    h1 { font-size: 30px; }
+    h2 { font-size: 22px; margin-top: 20px; }
+    h3 { font-size: 18px; margin-top: 16px; }
+    p { margin: 8px 0 14px; color: var(--muted); }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 14px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
+    }
+    .pill {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #e7efff;
+      color: #1d4ed8;
+      margin-bottom: 10px;
+    }
+    pre {
+      margin: 10px 0;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #d5deec;
+      background: #0f172a;
+      color: #e2e8f0;
+      overflow-x: auto;
+      font-size: 13px;
+    }
+    code {
+      background: #eef2ff;
+      color: #1e3a8a;
+      border-radius: 6px;
+      padding: 1px 6px;
+      font-size: 90%;
+    }
+    ul { margin: 8px 0 12px 20px; color: var(--muted); }
+    .ok { color: var(--ok); font-weight: 600; }
+    .warn { color: var(--warn); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="pill">BID - Operations Help</div>
+      <h1>Project Startup and Shutdown Guide</h1>
+      <p>This file describes how to run the BID project on Windows using the root scripts and common maintenance commands.</p>
+    </div>
+
+    <div class="card">
+      <h2>1. Prerequisites</h2>
+      <ul>
+        <li>Node.js 20+ and pnpm 9+ installed.</li>
+        <li>PowerShell execution policy allows local scripts.</li>
+        <li>Database URL configured in <code>app-next/.env.local</code>.</li>
+      </ul>
+      <pre>node -v
+pnpm -v</pre>
+    </div>
+
+    <div class="card">
+      <h2>2. One-time Install</h2>
+      <pre>pnpm install</pre>
+      <p>If database schema updates are pending:</p>
+      <pre>pnpm --dir app-next db:push</pre>
+    </div>
+
+    <div class="card">
+      <h2>3. Start the Project</h2>
+      <p>Use the root script from repository root:</p>
+      <pre>.\start.ps1</pre>
+      <p>Options:</p>
+      <pre>.\start.ps1 -Port 3000
+.\start.ps1 -Detached
+.\start.ps1 -Seed</pre>
+      <ul>
+        <li><code>-Detached</code>: starts in a new PowerShell window.</li>
+        <li><code>-Seed</code>: starts app then triggers demo seed endpoint.</li>
+      </ul>
+      <p class="ok">App URL: http://localhost:3000</p>
+    </div>
+
+    <div class="card">
+      <h2>4. Stop the Project</h2>
+      <p>Use the root stop script (kills listener on configured port):</p>
+      <pre>.\stop.ps1
+.\stop.ps1 -Port 3000</pre>
+    </div>
+
+    <div class="card">
+      <h2>5. Daily Operations</h2>
+      <h3>Type-check</h3>
+      <pre>pnpm --dir app-next typecheck</pre>
+      <h3>Run app from pnpm directly</h3>
+      <pre>pnpm --dir app-next dev</pre>
+      <h3>Build for production</h3>
+      <pre>pnpm --dir app-next build
+pnpm --dir app-next start</pre>
+    </div>
+
+    <div class="card">
+      <h2>6. Troubleshooting</h2>
+      <ul>
+        <li>If port is busy, run <code>.\stop.ps1</code> and restart.</li>
+        <li>If DB errors appear, verify <code>BID_DATABASE_URL</code> or <code>POWERBID_DATABASE_URL</code>.</li>
+        <li>If scripts are blocked, run PowerShell as admin once and set execution policy for current user.</li>
+      </ul>
+      <pre>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</pre>
+      <p class="warn">Use production secrets in environment variables and never commit real credentials.</p>
+    </div>
+  </div>
+</body>
+</html>

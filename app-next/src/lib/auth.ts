@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { AUTH_ISSUER } from "@/lib/branding";
 
 const COOKIE = "pb_session";
 
@@ -20,14 +21,14 @@ export async function signSession(payload: SessionPayload): Promise<string> {
   return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setIssuer("powerbid")
+    .setIssuer(AUTH_ISSUER)
     .setExpirationTime("7d")
     .sign(secret());
 }
 
 export async function verifySession(token: string): Promise<SessionPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, secret(), { issuer: "powerbid" });
+    const { payload } = await jwtVerify(token, secret(), { issuer: AUTH_ISSUER });
     return {
       userId: Number(payload.userId),
       email: String(payload.email),

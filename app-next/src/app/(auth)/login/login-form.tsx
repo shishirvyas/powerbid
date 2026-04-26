@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
+import { DEMO_USERS } from "@/lib/branding";
 
 const DEMO = [
-  { label: "Admin", email: "admin@powerbid.dev" },
-  { label: "Sales", email: "sales@powerbid.dev" },
-  { label: "Viewer", email: "viewer@powerbid.dev" },
+  { label: "Admin", email: DEMO_USERS.admin },
+  { label: "Sales", email: DEMO_USERS.sales },
+  { label: "Viewer", email: DEMO_USERS.viewer },
 ];
 
 export function LoginForm() {
@@ -19,7 +20,7 @@ export function LoginForm() {
   const params = useSearchParams();
   const from = params.get("from") || "/dashboard";
 
-  const [email, setEmail] = React.useState("admin@powerbid.dev");
+  const [email, setEmail] = React.useState<string>(DEMO_USERS.admin);
   const [password, setPassword] = React.useState("demo1234");
   const [loading, setLoading] = React.useState(false);
 

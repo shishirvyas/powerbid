@@ -110,8 +110,19 @@ export function getServerFieldErrors(err: unknown): FieldErrors {
   ) {
     return {};
   }
-  const data = (err as { data: { details?: { fieldErrors?: Record<string, string[] | undefined> } } }).data;
-  return flattenZodFieldErrors(data?.details?.fieldErrors);
+  const data = (err as {
+    data: {
+      details?: {
+        fieldErrors?: Record<string, string[] | undefined>;
+        issues?: Array<{ path?: string; message?: string }>;
+      };
+    };
+  }).data;
+  const out = flattenZodFieldErrors(data?.details?.fieldErrors);
+  for (const issue of data?.details?.issues ?? []) {
+    if (issue.path && issue.message && !out[issue.path]) out[issue.path] = issue.message;
+  }
+  return out;
 }
 
 /**

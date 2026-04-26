@@ -14,10 +14,11 @@ import {
   Settings,
   Users,
   X,
-  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/components/brand-logo";
+import { APP_SUBTITLE } from "@/lib/branding";
 
 const items = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -32,13 +33,7 @@ const items = [
 function Brand() {
   return (
     <div className="flex items-center gap-2 px-5 h-16 border-b border-sidebar-border">
-      <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-        <Zap className="h-4 w-4" />
-      </div>
-      <div className="leading-tight">
-        <div className="text-sm font-semibold">PowerBid</div>
-        <div className="text-[11px] text-sidebar-foreground/60">Quotation Suite</div>
-      </div>
+      <BrandLogo compact invert className="[&_svg]:h-8 [&_svg]:w-8" />
     </div>
   );
 }
@@ -123,7 +118,7 @@ export function MobileNav() {
         >
           <DialogPrimitive.Title className="sr-only">Navigation</DialogPrimitive.Title>
           <DialogPrimitive.Description className="sr-only">
-            Browse PowerBid sections.
+            Browse {APP_SUBTITLE} sections.
           </DialogPrimitive.Description>
           <div className="relative">
             <Brand />

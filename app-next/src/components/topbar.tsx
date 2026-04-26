@@ -6,6 +6,7 @@ import { LogOut, Search, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { MobileNav } from "@/components/sidebar";
+import { BrandLogo } from "@/components/brand-logo";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,6 +37,7 @@ export function Topbar({ user }: { user: User }) {
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-2 sm:gap-4 border-b bg-background/80 backdrop-blur px-4 sm:px-6">
       <MobileNav />
+      <BrandLogo className="hidden lg:flex [&_svg]:h-8 [&_svg]:w-8" compact />
       <button
         type="button"
         onClick={() => {

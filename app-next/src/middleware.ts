@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { jwtVerify } from "jose";
+import { AUTH_ISSUER } from "@/lib/branding";
 
 const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/admin/seed-demo"];
 
@@ -20,7 +21,7 @@ export async function middleware(req: NextRequest) {
   if (token && process.env.JWT_SECRET) {
     try {
       await jwtVerify(token, new TextEncoder().encode(process.env.JWT_SECRET), {
-        issuer: "powerbid",
+        issuer: AUTH_ISSUER,
       });
       valid = true;
     } catch {

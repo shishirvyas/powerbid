@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, Pencil, Printer } from "lucide-react";
+import { ArrowLeft, Download, Loader2, Mail, MessageCircle, Pencil, Printer } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,13 +15,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { api, ApiClientError } from "@/lib/api-client";
 import { useResource } from "@/lib/hooks";
 import { formatCurrency, formatDate } from "@/lib/calc";
+import { toast } from "sonner";
 
 type QuotationDetail = {
   id: number;
   quotationNo: string;
+  referenceNo: string | null;
   quotationDate: string;
+  subject: string | null;
+  projectName: string | null;
+  customerAttention: string | null;
+  introText: string | null;
   validityDays: number;
   status: string;
   currency: string;
@@ -35,6 +42,12 @@ type QuotationDetail = {
   paymentTerms: string | null;
   deliverySchedule: string | null;
   notes: string | null;
+  signatureMode: "upload" | "draw" | "typed" | null;
+  signatureData: string | null;
+  signatureName: string | null;
+  signatureDesignation: string | null;
+  signatureMobile: string | null;
+  signatureEmail: string | null;
   customer: {
     id: number;
     code: string;
@@ -62,9 +75,74 @@ type QuotationDetail = {
   }[];
 };
 
+type DispatchLog = {
+  id: number;
+  channel: string;
+  status: string;
+  recipient: string;
+  subject: string | null;
+  error: string | null;
+  createdAt: string;
+};
+
 export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = React.use(params);
-  const { data, loading, error } = useResource<QuotationDetail>(`/api/quotations/${id}`);
+  const { data, loading, error, refresh } = useResource<QuotationDetail>(`/api/quotations/${id}`);
+  const { data: dispatchLogs, refresh: refreshLogs } = useResource<DispatchLog[]>(`/api/quotations/${id}/dispatch`);
+  const [sending, setSending] = React.useState<"email" | "whatsapp" | null>(null);
+
+  async function sendEmail() {
+    if (!data) return;
+    const to = window.prompt("Recipient email", data.customer?.email || data.signatureEmail || "");
+    if (!to) return;
+    const subject = window.prompt("Email subject", data.subject || `Quotation ${data.referenceNo || data.quotationNo}`) || undefined;
+    try {
+      setSending("email");
+      await api(`/api/quotations/${id}/dispatch`, {
+        method: "POST",
+        json: {
+          channel: "email",
+          to,
+          subject,
+          attachPdf: true,
+        },
+      });
+      toast.success("Quotation emailed successfully");
+      refresh();
+      refreshLogs();
+    } catch (e: unknown) {
+      toast.error(e instanceof ApiClientError ? e.message : "Email send failed");
+    } finally {
+      setSending(null);
+    }
+  }
+
+  async function sendWhatsApp() {
+    if (!data) return;
+    const to = window.prompt("WhatsApp number (with country code)", data.customer?.phone || data.signatureMobile || "");
+    if (!to) return;
+    const message = window.prompt("Message", `Please find our quotation ${data.referenceNo || data.quotationNo}.`) || undefined;
+    try {
+      setSending("whatsapp");
+      const res = await api<{ whatsappUrl?: string }>(`/api/quotations/${id}/dispatch`, {
+        method: "POST",
+        json: {
+          channel: "whatsapp",
+          to,
+          message,
+          attachPdf: true,
+        },
+      });
+      if (res.whatsappUrl) window.open(res.whatsappUrl, "_blank");
+      toast.success("WhatsApp message prepared");
+      refresh();
+      refreshLogs();
+    } catch (e: unknown) {
+      toast.error(e instanceof ApiClientError ? e.message : "WhatsApp send failed");
+    } finally {
+      setSending(null);
+    }
+  }
 
   if (error) {
     return (
@@ -80,7 +158,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   return (
     <div className="space-y-6 animate-in fade-in-50">
       <PageHeader
-        title={data.quotationNo}
+        title={data.referenceNo || data.quotationNo}
         description={`Dated ${formatDate(data.quotationDate)} · valid ${data.validityDays} days`}
         actions={
           <div className="flex flex-wrap gap-2">
@@ -93,6 +171,17 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
               <Link href={`/quotations/${id}/print`} target="_blank">
                 <Printer className="h-4 w-4" /> Print
               </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href={`/api/quotations/${id}/pdf`} target="_blank">
+                <Download className="h-4 w-4" /> Download PDF
+              </Link>
+            </Button>
+            <Button variant="outline" onClick={sendEmail} disabled={sending !== null}>
+              {sending === "email" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />} Send Email
+            </Button>
+            <Button variant="outline" onClick={sendWhatsApp} disabled={sending !== null}>
+              {sending === "whatsapp" ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />} Send WhatsApp
             </Button>
             <Button asChild>
               <Link href={`/quotations/${id}/edit`}>
@@ -109,9 +198,12 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
             <CardTitle className="text-base">Customer</CardTitle>
           </CardHeader>
           <CardContent className="text-sm">
+            {data.subject ? <div className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">{data.subject}</div> : null}
+            {data.projectName ? <div className="mb-2 font-medium">Project: {data.projectName}</div> : null}
             {data.customer ? (
               <>
                 <div className="font-semibold">{data.customer.name}</div>
+                {data.customerAttention ? <div className="text-xs text-muted-foreground">Kind Attention: {data.customerAttention}</div> : null}
                 <div className="text-muted-foreground">
                   {[data.customer.addressLine1, data.customer.addressLine2, data.customer.city, data.customer.state, data.customer.pincode]
                     .filter(Boolean)
@@ -126,6 +218,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
             ) : (
               "—"
             )}
+            {data.introText ? <p className="mt-3 whitespace-pre-wrap text-muted-foreground">{data.introText}</p> : null}
           </CardContent>
         </Card>
         <Card>
@@ -187,6 +280,18 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
             <Section title="Delivery schedule" body={data.deliverySchedule} />
             <Section title="Terms & conditions" body={data.termsConditions} />
             <Section title="Notes" body={data.notes} />
+            <Section title="Signatory" body={[
+              data.signatureName,
+              data.signatureDesignation,
+              data.signatureMobile,
+              data.signatureEmail,
+            ].filter(Boolean).join("\n") || null} />
+            {data.signatureMode && data.signatureMode !== "typed" && data.signatureData ? (
+              <img src={data.signatureData} alt="Signature" className="max-h-16 object-contain" />
+            ) : null}
+            {data.signatureMode === "typed" && data.signatureData ? (
+              <div className="text-2xl" style={{ fontFamily: "cursive" }}>{data.signatureData}</div>
+            ) : null}
           </CardContent>
         </Card>
         <Card>
@@ -206,6 +311,40 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Dispatch history</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!dispatchLogs || dispatchLogs.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No send attempts yet.</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>When</TableHead>
+                  <TableHead>Channel</TableHead>
+                  <TableHead>Recipient</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Error</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {dispatchLogs.map((log) => (
+                  <TableRow key={log.id}>
+                    <TableCell>{formatDate(log.createdAt)}</TableCell>
+                    <TableCell className="capitalize">{log.channel}</TableCell>
+                    <TableCell>{log.recipient}</TableCell>
+                    <TableCell className="capitalize">{log.status}</TableCell>
+                    <TableCell className="text-destructive">{log.error || "-"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

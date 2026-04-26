@@ -1,4 +1,4 @@
-# PowerBid stop script — kills any process listening on the dev port.
+# BID stop script — kills any process listening on the dev port.
 # Usage:
 #   .\scripts\stop.ps1
 #   .\scripts\stop.ps1 -Port 3000
@@ -41,6 +41,6 @@ function Stop-PortProcess {
     }
 }
 
-Write-Host "PowerBid · stop" -ForegroundColor Cyan
+Write-Host "BID · stop" -ForegroundColor Cyan
 foreach ($p in $Port) { Stop-PortProcess -Port $p }
 Write-Host "Done." -ForegroundColor Green

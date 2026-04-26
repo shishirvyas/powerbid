@@ -21,6 +21,10 @@ type ReportData = {
   byStatus: { status: string; count: number; total: number }[];
   byMonth: { month: string; count: number; total: number }[];
   topCustomers: { id: number; name: string; total: number; count: number }[];
+  communications: {
+    byChannel: { channel: string; total: number; sent: number; failed: number; queued: number }[];
+    byDay: { day: string; sent: number; failed: number }[];
+  };
 };
 
 const STAT_ICONS = {
@@ -163,6 +167,75 @@ export function ReportsClient() {
           )}
         </CardContent>
       </Card>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Communication reliability (30 days)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {data.communications.byChannel.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No communication attempts yet.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Channel</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead className="text-right">Sent</TableHead>
+                    <TableHead className="text-right">Failed</TableHead>
+                    <TableHead className="text-right">Success %</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.communications.byChannel.map((c) => {
+                    const rate = c.total > 0 ? (c.sent / c.total) * 100 : 0;
+                    return (
+                      <TableRow key={c.channel}>
+                        <TableCell className="capitalize font-medium">{c.channel}</TableCell>
+                        <TableCell className="text-right tabular-nums">{c.total}</TableCell>
+                        <TableCell className="text-right tabular-nums text-emerald-600">{c.sent}</TableCell>
+                        <TableCell className="text-right tabular-nums text-destructive">{c.failed}</TableCell>
+                        <TableCell className="text-right tabular-nums">{rate.toFixed(1)}%</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Delivery trend (14 days)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {data.communications.byDay.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No delivery trend yet.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Day</TableHead>
+                    <TableHead className="text-right">Sent</TableHead>
+                    <TableHead className="text-right">Failed</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {data.communications.byDay.map((d) => (
+                    <TableRow key={d.day}>
+                      <TableCell>{d.day}</TableCell>
+                      <TableCell className="text-right tabular-nums text-emerald-600">{d.sent}</TableCell>
+                      <TableCell className="text-right tabular-nums text-destructive">{d.failed}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

@@ -15,6 +15,7 @@ import {
   quotationItems,
 } from "@/lib/db/schema";
 import { hashPassword } from "@/lib/crypto";
+import { DEMO_USERS } from "@/lib/branding";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -47,9 +48,9 @@ export async function POST(req: Request) {
   const insertedUsers = await db
     .insert(users)
     .values([
-      { email: "admin@powerbid.dev", name: "Demo Admin", role: "admin", passwordHash },
-      { email: "sales@powerbid.dev", name: "Demo Sales", role: "sales", passwordHash },
-      { email: "viewer@powerbid.dev", name: "Demo Viewer", role: "viewer", passwordHash },
+      { email: DEMO_USERS.admin, name: "Demo Admin", role: "admin", passwordHash },
+      { email: DEMO_USERS.sales, name: "Demo Sales", role: "sales", passwordHash },
+      { email: DEMO_USERS.viewer, name: "Demo Viewer", role: "viewer", passwordHash },
     ])
     .returning();
   const admin = insertedUsers[0];
@@ -269,9 +270,9 @@ export async function POST(req: Request) {
       quotations: quoteSeeds.length,
     },
     credentials: {
-      admin: "admin@powerbid.dev / demo1234",
-      sales: "sales@powerbid.dev / demo1234",
-      viewer: "viewer@powerbid.dev / demo1234",
+      admin: `${DEMO_USERS.admin} / demo1234`,
+      sales: `${DEMO_USERS.sales} / demo1234`,
+      viewer: `${DEMO_USERS.viewer} / demo1234`,
     },
   });
 }

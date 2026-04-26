@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { LoginForm } from "./login-form";
-import { Zap } from "lucide-react";
+import { BrandLogo } from "@/components/brand-logo";
+import { APP_NAME } from "@/lib/branding";
 
-export const metadata: Metadata = { title: "Sign in · PowerBid" };
+export const metadata: Metadata = { title: `Sign in · ${APP_NAME}` };
 
 export default function LoginPage() {
   return (
@@ -11,23 +12,18 @@ export default function LoginPage() {
       {/* Brand panel */}
       <div className="relative hidden lg:flex flex-col justify-between p-10 bg-sidebar text-sidebar-foreground overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,hsl(var(--primary)/0.25),transparent_60%)]" />
-        <div className="relative flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <Zap className="h-5 w-5" />
-          </div>
-          <span className="text-lg font-semibold">PowerBid</span>
-        </div>
+        <BrandLogo className="relative" invert compact />
         <div className="relative space-y-3 max-w-md">
           <h1 className="text-3xl font-semibold leading-tight">
-            Quotations that close faster.
+            Enterprise quotations in LAN business format.
           </h1>
           <p className="text-sm text-sidebar-foreground/70">
-            Manage inquiries, quotations and customers with a unified workspace
-            built for India&apos;s industrial trade.
+            Build and track professional quotations, inquiries, and customer
+            workflows in one unified industrial sales workspace.
           </p>
         </div>
         <div className="relative text-xs text-sidebar-foreground/50">
-          © {new Date().getFullYear()} PowerBid · Demo build
+          © {new Date().getFullYear()} {APP_NAME}
         </div>
       </div>
 
