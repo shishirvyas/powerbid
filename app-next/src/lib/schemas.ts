@@ -182,3 +182,46 @@ export const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).optional().default(50),
   offset: z.coerce.number().int().min(0).optional().default(0),
 });
+
+const isoDateParam = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD")
+  .optional();
+
+const truthyParam = z
+  .enum(["true", "false"])
+  .optional()
+  .transform((value) => value === "true");
+
+export const dashboardOverviewQuerySchema = z.object({
+  startDate: isoDateParam,
+  endDate: isoDateParam,
+  preset: z.enum(["7d", "30d", "this_month", "6m"]).optional().default("30d"),
+  ownerId: z.coerce.number().int().positive().optional(),
+  customerId: z.coerce.number().int().positive().optional(),
+  source: z.enum(["walkin", "phone", "email", "web", "other"]).optional(),
+  statusGroup: z.enum(["open", "closed", "won", "lost", "active"]).optional(),
+});
+export type DashboardOverviewQuery = z.infer<typeof dashboardOverviewQuerySchema>;
+
+export const quotationListQuerySchema = listQuerySchema.extend({
+  status: z.enum(["draft", "sent", "won", "lost", "expired", "cancelled"]).optional(),
+  ownerId: z.coerce.number().int().positive().optional(),
+  customerId: z.coerce.number().int().positive().optional(),
+  overdueFollowup: truthyParam,
+  ageBucket: z.enum(["0_2", "3_7", "8_15", "15_plus"]).optional(),
+  slaState: z.enum(["within", "near", "breached"]).optional(),
+});
+export type QuotationListQuery = z.infer<typeof quotationListQuerySchema>;
+
+export const inquiryListQuerySchema = listQuerySchema.extend({
+  status: z.enum(["new", "in_progress", "quoted", "won", "lost", "closed"]).optional(),
+  ownerId: z.coerce.number().int().positive().optional(),
+  customerId: z.coerce.number().int().positive().optional(),
+  source: z.enum(["walkin", "phone", "email", "web", "other"]).optional(),
+  needsQuotation: truthyParam,
+  unassigned: truthyParam,
+  ageBucket: z.enum(["0_2", "3_7", "8_15", "15_plus"]).optional(),
+  slaState: z.enum(["within", "near", "breached"]).optional(),
+});
+export type InquiryListQuery = z.infer<typeof inquiryListQuerySchema>;

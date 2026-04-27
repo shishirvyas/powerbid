@@ -20,7 +20,23 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   try {
     await requireSession();
     const id = parseId((await ctx.params).id);
-    const [row] = await db.select().from(inquiries).where(eq(inquiries.id, id));
+    const [row] = await db
+      .select({
+        id: inquiries.id,
+        inquiryNo: inquiries.inquiryNo,
+        customerId: inquiries.customerId,
+        customerName: inquiries.customerName,
+        source: inquiries.source,
+        priority: inquiries.priority,
+        status: inquiries.status,
+        requirement: inquiries.requirement,
+        expectedClosure: inquiries.expectedClosure,
+        assignedTo: inquiries.assignedTo,
+        createdAt: inquiries.createdAt,
+        updatedAt: inquiries.updatedAt,
+      })
+      .from(inquiries)
+      .where(eq(inquiries.id, id));
     if (!row) throw new ApiError(404, "Inquiry not found");
     const items = await db
       .select()

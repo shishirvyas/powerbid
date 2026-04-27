@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { quotations, quotationItems, customers } from "@/lib/db/schema";
 import {
@@ -10,7 +10,7 @@ import {
   parseSearch,
   requireSession,
 } from "@/lib/api";
-import { listQuerySchema, quotationSchema } from "@/lib/schemas";
+import { quotationListQuerySchema, quotationSchema } from "@/lib/schemas";
 import { calcQuotation } from "@/lib/calc";
 
 export const runtime = "nodejs";
@@ -31,13 +31,44 @@ async function nextQuotationNo(): Promise<string> {
 export async function GET(req: NextRequest) {
   try {
     const session = await requireSession();
-    const { q, limit, offset } = parseSearch(new URL(req.url), listQuerySchema);
-    const where = q
-      ? or(
+    const { q, limit, offset, status, ownerId, customerId, overdueFollowup, ageBucket, slaState } = parseSearch(new URL(req.url), quotationListQuerySchema);
+    const clauses = [];
+    if (q) {
+      clauses.push(
+        or(
           ilike(quotations.quotationNo, `%${q}%`),
           ilike(customers.name, `%${q}%`),
-        )
-      : undefined;
+        ),
+      );
+    }
+    if (status) clauses.push(eq(quotations.status, status));
+    if (ownerId) clauses.push(eq(quotations.createdBy, ownerId));
+    if (customerId) clauses.push(eq(quotations.customerId, customerId));
+    if (overdueFollowup) {
+      clauses.push(sql`${quotations.status} = 'sent' and coalesce(nullif(${quotations.sentAt}, '')::timestamptz, ${quotations.createdAt}) + interval '3 days' < now()`);
+    }
+    if (slaState === "within") {
+      clauses.push(sql`${quotations.status} = 'sent' and coalesce(nullif(${quotations.sentAt}, '')::timestamptz, ${quotations.createdAt}) + interval '3 days' > now() + interval '12 hours'`);
+    }
+    if (slaState === "near") {
+      clauses.push(sql`${quotations.status} = 'sent' and coalesce(nullif(${quotations.sentAt}, '')::timestamptz, ${quotations.createdAt}) + interval '3 days' between now() and now() + interval '12 hours'`);
+    }
+    if (slaState === "breached") {
+      clauses.push(sql`${quotations.status} = 'sent' and coalesce(nullif(${quotations.sentAt}, '')::timestamptz, ${quotations.createdAt}) + interval '3 days' < now()`);
+    }
+    if (ageBucket === "0_2") {
+      clauses.push(sql`${quotations.createdAt} > now() - interval '3 days'`);
+    }
+    if (ageBucket === "3_7") {
+      clauses.push(sql`${quotations.createdAt} <= now() - interval '3 days' and ${quotations.createdAt} > now() - interval '8 days'`);
+    }
+    if (ageBucket === "8_15") {
+      clauses.push(sql`${quotations.createdAt} <= now() - interval '8 days' and ${quotations.createdAt} > now() - interval '16 days'`);
+    }
+    if (ageBucket === "15_plus") {
+      clauses.push(sql`${quotations.createdAt} <= now() - interval '16 days'`);
+    }
+    const where = clauses.length ? and(...clauses) : undefined;
     const rows = await db
       .select({
         id: quotations.id,

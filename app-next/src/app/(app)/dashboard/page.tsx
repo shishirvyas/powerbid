@@ -1,46 +1,22 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { db } from "@/lib/db";
-import { quotations, customers, products, inquiries } from "@/lib/db/schema";
-import { sql, eq } from "drizzle-orm";
+import { getDashboardOverview } from "@/lib/dashboard/metrics";
 import { formatINR } from "@/lib/utils";
 import { FileText, Users, Package, Inbox } from "lucide-react";
 
-async function getStats() {
-  try {
-    const [quoteCount] = await db.select({ c: sql<number>`count(*)::int` }).from(quotations);
-    const [custCount] = await db.select({ c: sql<number>`count(*)::int` }).from(customers);
-    const [prodCount] = await db.select({ c: sql<number>`count(*)::int` }).from(products);
-    const [inqCount] = await db.select({ c: sql<number>`count(*)::int` }).from(inquiries);
-    const [revenue] = await db
-      .select({ s: sql<string>`coalesce(sum(grand_total), 0)::text` })
-      .from(quotations)
-      .where(eq(quotations.status, "won"));
-    return {
-      quotations: quoteCount?.c ?? 0,
-      customers: custCount?.c ?? 0,
-      products: prodCount?.c ?? 0,
-      inquiries: inqCount?.c ?? 0,
-      revenue: Number(revenue?.s ?? 0),
-    };
-  } catch {
-    return { quotations: 0, customers: 0, products: 0, inquiries: 0, revenue: 0 };
-  }
-}
-
 export default async function DashboardPage() {
-  const s = await getStats();
+  const overview = await getDashboardOverview({ preset: "30d" });
   const cards = [
-    { label: "Quotations", value: s.quotations, icon: FileText },
-    { label: "Customers", value: s.customers, icon: Users },
-    { label: "Products", value: s.products, icon: Package },
-    { label: "Open Inquiries", value: s.inquiries, icon: Inbox },
+    { label: "Quotations", value: overview.kpis.quotations.total, icon: FileText },
+    { label: "Customers", value: overview.kpis.customers.total, icon: Users },
+    { label: "Open Inquiries", value: overview.kpis.inquiries.open, icon: Inbox },
+    { label: "Pending Approval", value: overview.kpis.quotations.pendingApproval, icon: Package },
   ];
   return (
     <div className="space-y-8 animate-in fade-in-50">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
         <p className="text-sm text-muted-foreground">
-          Snapshot of your quotation pipeline.
+          Snapshot of your quotation pipeline for the last 30 days.
         </p>
       </div>
 
@@ -66,11 +42,13 @@ export default async function DashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle>Won revenue</CardTitle>
-          <CardDescription>Total value of won quotations</CardDescription>
+          <CardDescription>
+            Current month vs previous month: {overview.kpis.revenue.growthPct == null ? "new baseline" : `${overview.kpis.revenue.growthPct}%`}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="text-4xl font-semibold tracking-tight">
-            {formatINR(s.revenue)}
+            {formatINR(overview.kpis.revenue.wonThisMonth)}
           </div>
         </CardContent>
       </Card>

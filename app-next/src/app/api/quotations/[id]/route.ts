@@ -26,7 +26,49 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   try {
     await requireSession();
     const id = parseId((await ctx.params).id);
-    const [row] = await db.select().from(quotations).where(eq(quotations.id, id));
+    const [row] = await db
+      .select({
+        id: quotations.id,
+        quotationNo: quotations.quotationNo,
+        referenceNo: quotations.referenceNo,
+        quotationDate: quotations.quotationDate,
+        subject: quotations.subject,
+        projectName: quotations.projectName,
+        customerAttention: quotations.customerAttention,
+        introText: quotations.introText,
+        validityDays: quotations.validityDays,
+        inquiryId: quotations.inquiryId,
+        customerId: quotations.customerId,
+        contactPersonId: quotations.contactPersonId,
+        status: quotations.status,
+        currency: quotations.currency,
+        subtotal: quotations.subtotal,
+        discountType: quotations.discountType,
+        discountValue: quotations.discountValue,
+        discountAmount: quotations.discountAmount,
+        taxableAmount: quotations.taxableAmount,
+        gstAmount: quotations.gstAmount,
+        freightAmount: quotations.freightAmount,
+        grandTotal: quotations.grandTotal,
+        termsConditions: quotations.termsConditions,
+        paymentTerms: quotations.paymentTerms,
+        deliverySchedule: quotations.deliverySchedule,
+        notes: quotations.notes,
+        signatureMode: quotations.signatureMode,
+        signatureData: quotations.signatureData,
+        signatureName: quotations.signatureName,
+        signatureDesignation: quotations.signatureDesignation,
+        signatureMobile: quotations.signatureMobile,
+        signatureEmail: quotations.signatureEmail,
+        sentAt: quotations.sentAt,
+        closedAt: quotations.closedAt,
+        createdBy: quotations.createdBy,
+        updatedBy: quotations.updatedBy,
+        createdAt: quotations.createdAt,
+        updatedAt: quotations.updatedAt,
+      })
+      .from(quotations)
+      .where(eq(quotations.id, id));
     if (!row) throw new ApiError(404, "Quotation not found");
     const items = await db
       .select()
@@ -34,7 +76,26 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       .where(eq(quotationItems.quotationId, id))
       .orderBy(asc(quotationItems.sortOrder));
     const [customer] = await db
-      .select()
+      .select({
+        id: customers.id,
+        code: customers.code,
+        name: customers.name,
+        contactPerson: customers.contactPerson,
+        email: customers.email,
+        phone: customers.phone,
+        gstin: customers.gstin,
+        pan: customers.pan,
+        addressLine1: customers.addressLine1,
+        addressLine2: customers.addressLine2,
+        city: customers.city,
+        state: customers.state,
+        pincode: customers.pincode,
+        country: customers.country,
+        notes: customers.notes,
+        isActive: customers.isActive,
+        createdAt: customers.createdAt,
+        updatedAt: customers.updatedAt,
+      })
       .from(customers)
       .where(eq(customers.id, row.customerId));
     let contact = null;

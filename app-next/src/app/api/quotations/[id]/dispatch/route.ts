@@ -61,9 +61,27 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       throw new ApiError(429, "Too many send attempts. Please wait a minute and retry.");
     }
 
-    const [q] = await db.select().from(quotations).where(eq(quotations.id, id));
+    const [q] = await db
+      .select({
+        id: quotations.id,
+        quotationNo: quotations.quotationNo,
+        referenceNo: quotations.referenceNo,
+        subject: quotations.subject,
+        projectName: quotations.projectName,
+        customerId: quotations.customerId,
+      })
+      .from(quotations)
+      .where(eq(quotations.id, id));
     if (!q) throw new ApiError(404, "Quotation not found");
-    const [customer] = await db.select().from(customers).where(eq(customers.id, q.customerId));
+    const [customer] = await db
+      .select({
+        id: customers.id,
+        name: customers.name,
+        email: customers.email,
+        phone: customers.phone,
+      })
+      .from(customers)
+      .where(eq(customers.id, q.customerId));
     const pdfUrl = `${appBaseUrl(req)}/api/quotations/${id}/pdf`;
     const template = await getTemplate(payload.channel, "quotation_send");
     const vars = {

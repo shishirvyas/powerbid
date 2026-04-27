@@ -20,7 +20,29 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
   try {
     await requireSession();
     const id = parseId((await ctx.params).id);
-    const [row] = await db.select().from(customers).where(eq(customers.id, id));
+    const [row] = await db
+      .select({
+        id: customers.id,
+        code: customers.code,
+        name: customers.name,
+        contactPerson: customers.contactPerson,
+        email: customers.email,
+        phone: customers.phone,
+        gstin: customers.gstin,
+        pan: customers.pan,
+        addressLine1: customers.addressLine1,
+        addressLine2: customers.addressLine2,
+        city: customers.city,
+        state: customers.state,
+        pincode: customers.pincode,
+        country: customers.country,
+        notes: customers.notes,
+        isActive: customers.isActive,
+        createdAt: customers.createdAt,
+        updatedAt: customers.updatedAt,
+      })
+      .from(customers)
+      .where(eq(customers.id, id));
     if (!row) throw new ApiError(404, "Customer not found");
     return jsonOk(row);
   } catch (err) {

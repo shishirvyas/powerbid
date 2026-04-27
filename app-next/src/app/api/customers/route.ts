@@ -27,7 +27,26 @@ export async function GET(req: NextRequest) {
         )
       : undefined;
     const rows = await db
-      .select()
+      .select({
+        id: customers.id,
+        code: customers.code,
+        name: customers.name,
+        contactPerson: customers.contactPerson,
+        email: customers.email,
+        phone: customers.phone,
+        gstin: customers.gstin,
+        pan: customers.pan,
+        addressLine1: customers.addressLine1,
+        addressLine2: customers.addressLine2,
+        city: customers.city,
+        state: customers.state,
+        pincode: customers.pincode,
+        country: customers.country,
+        notes: customers.notes,
+        isActive: customers.isActive,
+        createdAt: customers.createdAt,
+        updatedAt: customers.updatedAt,
+      })
       .from(customers)
       .where(where)
       .orderBy(desc(customers.createdAt))
