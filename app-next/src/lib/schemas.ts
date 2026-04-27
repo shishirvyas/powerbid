@@ -7,6 +7,16 @@ const optionalString = z
   .nullish()
   .transform((v) => (v ? v : null));
 
+// For multi-line free-text fields (terms & conditions, notes, requirement,
+// payment terms, delivery schedule, intro paragraph). No length cap is
+// enforced from the form so users can paste long boilerplate clauses.
+const longText = z
+  .string()
+  .trim()
+  .max(20000)
+  .nullish()
+  .transform((v) => (v ? v : null));
+
 const requiredString = (label: string, max = 200) =>
   z.string().trim().min(1, `${label} is required`).max(max);
 
@@ -57,7 +67,7 @@ export const inquirySchema = z.object({
   status: z
     .enum(["new", "in_progress", "quoted", "won", "lost", "closed"])
     .default("new"),
-  requirement: optionalString,
+  requirement: longText,
   expectedClosure: optionalString,
   assignedTo: z.coerce.number().int().positive().nullable().optional(),
   items: z
@@ -99,7 +109,7 @@ export const quotationSchema = z.object({
   subject: optionalString,
   projectName: optionalString,
   customerAttention: optionalString,
-  introText: optionalString,
+  introText: longText,
   validityDays: z.coerce.number().int().min(0).max(365).default(15),
   customerId: z.coerce.number().int().positive(),
   contactPersonId: z.coerce.number().int().positive().nullable().optional(),
@@ -111,10 +121,10 @@ export const quotationSchema = z.object({
   discountType: z.enum(["percent", "amount"]).default("percent"),
   discountValue: z.coerce.number().min(0).default(0),
   freightAmount: z.coerce.number().min(0).default(0),
-  termsConditions: optionalString,
-  paymentTerms: optionalString,
-  deliverySchedule: optionalString,
-  notes: optionalString,
+  termsConditions: longText,
+  paymentTerms: longText,
+  deliverySchedule: longText,
+  notes: longText,
   signatureMode: z.enum(["upload", "draw", "typed"]).nullable().optional(),
   signatureData: z.string().trim().max(1000000).nullable().optional(),
   signatureName: optionalString,

@@ -24,6 +24,34 @@ import {
 } from "@/lib/branding";
 import { collectQtyColumns, parseQtyBreakup, sumQtyBreakup } from "@/lib/quotation-format";
 
+/**
+ * Strip HTML produced by the rich-text editor down to plain text suitable for
+ * pdf-lib rendering. Preserves paragraph breaks and bullet markers.
+ */
+function htmlToPlain(html: string | null | undefined): string {
+  if (!html) return "";
+  if (!/<\/?[a-z]/i.test(html)) return html.trim();
+  let s = html
+    .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/(p|div|h[1-6]|blockquote)>/gi, "\n\n")
+    .replace(/<li[^>]*>/gi, "• ")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<[^>]+>/g, "");
+  s = s
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+  return s
+    .split("\n")
+    .map((l) => l.replace(/[ \t]+$/g, ""))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 type Ctx = { params: Promise<{ id: string }> };
 
 // A4 (595.28 x 841.89 pt)
@@ -105,7 +133,7 @@ const CANONICAL_TERMS = [
 ] as const;
 
 function buildTermsText(termsConditions: string | null | undefined) {
-  const customLines = (termsConditions ?? "")
+  const customLines = htmlToPlain(termsConditions)
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
@@ -395,7 +423,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     cy -= 18;
 
     // Intro paragraph
-    const intro = q.introText ||
+    const intro = htmlToPlain(q.introText) ||
       "We thankfully acknowledge the receipt of your inquiry and are pleased to submit our optimum offer for your kind consideration. We anticipate that our offer will be in line with your requirement. We look forward to your valued response. If you require any techno commercial clarification, please feel free to contact us.";
     const introLines = wrapText(intro, fontSerif, 10, PW - MARGIN_X * 2);
     for (const line of introLines.slice(0, 12)) {

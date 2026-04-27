@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Pencil, Plus, Search, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Eye, FileText, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, EmptyState } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -117,6 +118,7 @@ export function InquiriesClient() {
 
   const [open, setOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<number | null>(null);
+  const [viewingId, setViewingId] = React.useState<number | null>(null);
   const [confirmDel, setConfirmDel] = React.useState<InquiryRow | null>(null);
 
   return (
@@ -199,6 +201,26 @@ export function InquiriesClient() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          onClick={() => setViewingId(r.id)}
+                          aria-label="View"
+                          title="View inquiry"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          asChild
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Create quotation"
+                          title="Create quotation from inquiry"
+                        >
+                          <Link href={`/quotations/new?fromInquiry=${r.id}`}>
+                            <FileText className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           onClick={() => {
                             setEditingId(r.id);
                             setOpen(true);
@@ -239,6 +261,11 @@ export function InquiriesClient() {
           setOpen(false);
           refresh();
         }}
+      />
+
+      <InquiryViewDialog
+        inquiryId={viewingId}
+        onClose={() => setViewingId(null)}
       />
 
       <ConfirmDialog
@@ -600,6 +627,112 @@ function InquiryFormDialog({
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function InquiryViewDialog({
+  inquiryId,
+  onClose,
+}: {
+  inquiryId: number | null;
+  onClose: () => void;
+}) {
+  const open = inquiryId !== null;
+  const { data, loading, error } = useResource<InquiryFull>(open && inquiryId ? `/api/inquiries/${inquiryId}` : null);
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{data?.inquiryNo ?? "Inquiry details"}</DialogTitle>
+          <DialogDescription>
+            {data ? `Captured ${formatDate(data.inquiryDate)}` : "Loading inquiry…"}
+          </DialogDescription>
+        </DialogHeader>
+
+        {error ? (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error}
+          </div>
+        ) : null}
+
+        {loading || !data ? (
+          <div className="text-sm text-muted-foreground">Loading…</div>
+        ) : (
+          <div className="space-y-4 text-sm">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Customer</div>
+                <div className="font-medium">{data.customerName || "—"}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Expected closure</div>
+                <div>{data.expectedClosure ? formatDate(data.expectedClosure) : "—"}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Source</div>
+                <div className="capitalize">{data.source}</div>
+              </div>
+              <div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Priority / Status</div>
+                <div className="flex items-center gap-2">
+                  <PriorityBadge priority={data.priority} />
+                  <InquiryStatusBadge status={data.status} />
+                </div>
+              </div>
+            </div>
+
+            {data.requirement ? (
+              <div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Requirement</div>
+                <div className="whitespace-pre-wrap rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                  {data.requirement}
+                </div>
+              </div>
+            ) : null}
+
+            <div>
+              <div className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Items ({data.items.length})</div>
+              {data.items.length === 0 ? (
+                <div className="text-sm text-muted-foreground">No line items.</div>
+              ) : (
+                <div className="overflow-hidden rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Product</TableHead>
+                        <TableHead className="w-24 text-right">Qty</TableHead>
+                        <TableHead className="hidden sm:table-cell">Remarks</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {data.items.map((it, idx) => (
+                        <TableRow key={it.id ?? idx}>
+                          <TableCell className="font-medium">{it.productName}</TableCell>
+                          <TableCell className="text-right tabular-nums">{it.qty}</TableCell>
+                          <TableCell className="hidden sm:table-cell text-muted-foreground">{it.remarks || "—"}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Close</Button>
+          {data ? (
+            <Button asChild>
+              <Link href={`/quotations/new?fromInquiry=${data.id}`} onClick={onClose}>
+                <FileText className="h-4 w-4" /> Create quotation
+              </Link>
+            </Button>
+          ) : null}
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

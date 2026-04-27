@@ -23,6 +23,45 @@ export const DEFAULT_SIGNER_NAME = "Deepak Virwal";
 export const DEFAULT_SIGNER_DESIGNATION = "GM- Sales & Marketing";
 export const DEFAULT_SIGNER_MOBILE = "9667066229";
 
+export type SignaturePreset = {
+  id: string;
+  label: string;
+  name: string;
+  designation: string;
+  mobile: string;
+  email: string;
+};
+
+// Prepopulated authorised signatories — pick one from the quotation form to
+// auto-fill the signature block. Add or edit entries here to manage your
+// in-house "signature master".
+export const SIGNATURE_PRESETS: SignaturePreset[] = [
+  {
+    id: "deepak",
+    label: "Deepak Virwal — GM Sales & Marketing",
+    name: "Deepak Virwal",
+    designation: "GM - Sales & Marketing",
+    mobile: "9667066229",
+    email: "sale@lanengineering.in",
+  },
+  {
+    id: "director",
+    label: "Authorised Signatory — Director",
+    name: "Authorised Signatory",
+    designation: "Director",
+    mobile: "+91-9811520225",
+    email: "lantechnoida@gmail.com",
+  },
+  {
+    id: "sales",
+    label: "Sales Desk",
+    name: "Sales Desk",
+    designation: "Sales & Marketing",
+    mobile: "+91-9811520225",
+    email: "sale@lanengineering.in",
+  },
+];
+
 export const BRAND_SUPPORT_EMAIL = "support@lanengineering.in";
 
 export const AUTH_ISSUER = process.env.JWT_ISSUER || "bid";

@@ -13,9 +13,11 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { RichTextEditor } from "@/components/rich-text-editor";
 import { useList, useResource } from "@/lib/hooks";
 import { api, ApiClientError } from "@/lib/api-client";
 import { calcQuotation, formatCurrency } from "@/lib/calc";
+import { SIGNATURE_PRESETS } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 import { parseQtyBreakup, stringifyQtyBreakup, sumQtyBreakup } from "@/lib/quotation-format";
 import {
@@ -77,6 +79,7 @@ export type QuotationBuilderInitial = {
   validityDays: number;
   customerId: number | null;
   contactPersonId: number | null;
+  inquiryId: number | null;
   status: "draft" | "sent" | "won" | "lost" | "expired" | "cancelled";
   currency: string;
   discountType: "percent" | "amount";
@@ -118,6 +121,7 @@ export const blankInitial: QuotationBuilderInitial = {
   validityDays: 15,
   customerId: null,
   contactPersonId: null,
+  inquiryId: null,
   status: "draft",
   currency: "INR",
   discountType: "percent",
@@ -330,6 +334,7 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
       validityDays: Number(form.validityDays) || 0,
       customerId: form.customerId,
       contactPersonId: form.contactPersonId,
+      inquiryId: form.inquiryId,
       status: form.status,
       currency: form.currency,
       discountType: form.discountType,
@@ -567,10 +572,11 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
             />
           </Field>
           <Field label="Intro paragraph" className="lg:col-span-4">
-            <Textarea
-              rows={3}
+            <RichTextEditor
               value={form.introText}
-              onChange={(e) => setForm((f) => ({ ...f, introText: e.target.value }))}
+              onChange={(html) => setForm((f) => ({ ...f, introText: html }))}
+              placeholder="Cover-letter introduction shown on the first page…"
+              minHeight={120}
             />
           </Field>
         </CardContent>
@@ -780,24 +786,27 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
         </CardHeader>
         <CardContent className="grid gap-4 lg:grid-cols-2">
           <Field label="Payment terms">
-            <Textarea
-              rows={2}
+            <RichTextEditor
               value={form.paymentTerms}
-              onChange={(e) => setForm((f) => ({ ...f, paymentTerms: e.target.value }))}
+              onChange={(html) => setForm((f) => ({ ...f, paymentTerms: html }))}
+              placeholder="e.g. 30% advance, balance against PI…"
+              minHeight={100}
             />
           </Field>
           <Field label="Delivery schedule">
-            <Textarea
-              rows={2}
+            <RichTextEditor
               value={form.deliverySchedule}
-              onChange={(e) => setForm((f) => ({ ...f, deliverySchedule: e.target.value }))}
+              onChange={(html) => setForm((f) => ({ ...f, deliverySchedule: html }))}
+              placeholder="e.g. 4-6 weeks from receipt of confirmed PO…"
+              minHeight={100}
             />
           </Field>
           <Field label="Terms &amp; conditions" className="lg:col-span-2">
-            <Textarea
-              rows={3}
+            <RichTextEditor
               value={form.termsConditions}
-              onChange={(e) => setForm((f) => ({ ...f, termsConditions: e.target.value }))}
+              onChange={(html) => setForm((f) => ({ ...f, termsConditions: html }))}
+              placeholder="Commercial terms, scope, validity, warranty…"
+              minHeight={180}
             />
             <Button
               type="button"
@@ -810,10 +819,11 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
             </Button>
           </Field>
           <Field label="Internal notes" className="lg:col-span-2">
-            <Textarea
-              rows={2}
+            <RichTextEditor
               value={form.notes}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+              onChange={(html) => setForm((f) => ({ ...f, notes: html }))}
+              placeholder="Internal-only notes (not printed on PDF)…"
+              minHeight={100}
             />
           </Field>
         </CardContent>
@@ -843,6 +853,34 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
             <CardTitle className="text-base">Signature &amp; send</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 lg:grid-cols-2">
+            <Field label="Use saved signatory" className="lg:col-span-2">
+              <Select
+                value=""
+                onChange={(e) => {
+                  const preset = SIGNATURE_PRESETS.find((p) => p.id === e.target.value);
+                  if (!preset) return;
+                  setForm((f) => ({
+                    ...f,
+                    signatureName: preset.name,
+                    signatureDesignation: preset.designation,
+                    signatureMobile: preset.mobile,
+                    signatureEmail: preset.email,
+                  }));
+                  // reset selector so picking the same preset twice still applies
+                  e.target.value = "";
+                }}
+              >
+                <option value="">— Select to fill name / designation / mobile / email —</option>
+                {SIGNATURE_PRESETS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Manage these presets in <code>app-next/src/lib/branding.ts</code> &rarr; <code>SIGNATURE_PRESETS</code>.
+              </p>
+            </Field>
             <Field label="Signature mode" className="lg:col-span-2">
               <Select
                 value={form.signatureMode}
@@ -1090,6 +1128,7 @@ export function QuotationBuilderForId({ id }: { id: number }) {
     validityDays: number;
     customerId: number;
     contactPersonId: number | null;
+    inquiryId: number | null;
     status: string;
     currency: string;
     discountType: string;
@@ -1134,6 +1173,7 @@ export function QuotationBuilderForId({ id }: { id: number }) {
     validityDays: data.validityDays ?? 15,
     customerId: data.customerId,
     contactPersonId: data.contactPersonId ?? null,
+    inquiryId: data.inquiryId ?? null,
     status: (data.status as QuotationBuilderInitial["status"]) ?? "draft",
     currency: data.currency ?? "INR",
     discountType: (data.discountType as "percent" | "amount") ?? "percent",
