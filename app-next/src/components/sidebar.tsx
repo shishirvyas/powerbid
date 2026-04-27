@@ -10,6 +10,7 @@ import {
   Inbox,
   LayoutDashboard,
   Menu,
+  MonitorPlay,
   Package,
   Settings,
   Users,
@@ -26,6 +27,7 @@ const items = [
   { href: "/inquiries", label: "Inquiries", icon: Inbox },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/products", label: "Products", icon: Package },
+  { href: "/showcase", label: "Showcase", icon: MonitorPlay },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
