@@ -91,7 +91,7 @@ function Slide1({ dark }: { dark: boolean }) {
       </div>
       <div>
         <h1 className={cn("text-6xl md:text-7xl font-black tracking-tight leading-none", dark ? "text-white" : "text-gray-900")}>
-          Power<span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Bid</span>
+          LAN <span className="bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">Engineering</span>
         </h1>
         <p className={cn("mt-5 text-xl md:text-2xl font-medium max-w-2xl mx-auto leading-relaxed", dark ? "text-gray-300" : "text-gray-600")}>
           Transforming Operations Through Intelligent Automation
