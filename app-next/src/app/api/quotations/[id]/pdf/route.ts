@@ -160,11 +160,11 @@ function drawHeaderPage1(
   page.drawText(title, { x: tx, y: ty, size: titleSize, font: italic, color: rgb(0.08, 0.12, 0.22) });
   drawUnderline(page, tx, ty, tw, rgb(0.08, 0.12, 0.22));
 
+  page.drawLine({ start: { x: MARGIN_X, y: 688 }, end: { x: PW - MARGIN_X, y: 688 }, thickness: 0.7, color: rgb(0.76, 0.8, 0.86) });
   page.drawText(`Ref: ${refNo}`, { x: MARGIN_X, y: 663, size: 10, font: sansBold, color: rgb(0.08, 0.12, 0.22) });
   const dateLabel = `Date: ${dateStr}`;
   const dw = sans.widthOfTextAtSize(dateLabel, 10);
   page.drawText(dateLabel, { x: PW - MARGIN_X - dw, y: 663, size: 10, font: sans, color: rgb(0.2, 0.24, 0.3) });
-  page.drawLine({ start: { x: MARGIN_X, y: 655 }, end: { x: PW - MARGIN_X, y: 655 }, thickness: 0.7, color: rgb(0.76, 0.8, 0.86) });
 }
 
 function drawHeaderPageStandard(
@@ -179,10 +179,10 @@ function drawHeaderPageStandard(
   void sansBold;
   void refNo;
 
+  page.drawLine({ start: { x: MARGIN_X, y: 688 }, end: { x: PW - MARGIN_X, y: 688 }, thickness: 0.7, color: rgb(0.76, 0.8, 0.86) });
   const dateLabel = `Date: ${dateStr}`;
   const dw = sans.widthOfTextAtSize(dateLabel, 10);
   page.drawText(dateLabel, { x: PW - MARGIN_X - dw, y: 663, size: 10, font: sans, color: rgb(0.2, 0.24, 0.3) });
-  page.drawLine({ start: { x: MARGIN_X, y: 655 }, end: { x: PW - MARGIN_X, y: 655 }, thickness: 0.7, color: rgb(0.76, 0.8, 0.86) });
 }
 
 function drawJustifiedParagraph(

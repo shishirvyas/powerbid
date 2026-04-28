@@ -21,17 +21,63 @@ import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/brand-logo";
 import { APP_SUBTITLE } from "@/lib/branding";
 
-const items = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/quotations", label: "Quotations", icon: FileText },
-  { href: "/inquiries", label: "Inquiries", icon: Inbox },
-  { href: "/customers", label: "Customers", icon: Users },
-  { href: "/products", label: "Products", icon: Package },
-  { href: "/units", label: "Units", icon: Package },
-    { href: "/subject-templates", label: "Subject Templates", icon: FileText },
-  { href: "/showcase", label: "Showcase", icon: MonitorPlay },
-  { href: "/reports", label: "Reports", icon: BarChart3 },
-  { href: "/settings", label: "Settings", icon: Settings },
+type NavItem = {
+  type: "item";
+  label: string;
+  href: string;
+  icon?: React.ComponentType<{ className?: string }>;
+};
+
+type NavGroup = {
+  type: "group";
+  key: string;
+  label: string;
+  children: Array<{
+    label: string;
+    href: string;
+    icon?: React.ComponentType<{ className?: string }>;
+  }>;
+};
+
+type NavNode = NavItem | NavGroup;
+
+const navConfig: NavNode[] = [
+  { type: "item", href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  {
+    type: "group",
+    key: "transactions",
+    label: "Transactions",
+    children: [
+      { label: "Inquiries", href: "/inquiries", icon: Inbox },
+      { label: "Quotations", href: "/quotations", icon: FileText },
+    ],
+  },
+  {
+    type: "group",
+    key: "analytics",
+    label: "Analytics",
+    children: [
+      { label: "Reports", href: "/reports", icon: BarChart3 },
+      { label: "Showcase", href: "/showcase", icon: MonitorPlay },
+    ],
+  },
+  {
+    type: "group",
+    key: "administration",
+    label: "Administration",
+    children: [{ label: "Settings", href: "/settings", icon: Settings }],
+  },
+  {
+    type: "group",
+    key: "masters",
+    label: "Masters",
+    children: [
+      { label: "Customers", href: "/customers", icon: Users },
+      { label: "Products", href: "/products", icon: Package },
+      { label: "Units", href: "/units", icon: Package },
+      { label: "Subject Templates", href: "/subject-templates", icon: FileText },
+    ],
+  },
 ];
 
 function Brand() {
@@ -44,27 +90,71 @@ function Brand() {
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+
+  function isActive(href: string) {
+    return pathname === href || pathname.startsWith(href + "/");
+  }
+
   return (
     <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-      {items.map((it) => {
-        const active =
-          pathname === it.href || pathname.startsWith(it.href + "/");
-        const Icon = it.icon;
+      {navConfig.map((node) => {
+        if (node.type === "item") {
+          const active = isActive(node.href);
+          const Icon = node.icon;
+          return (
+            <Link
+              key={node.href}
+              href={node.href}
+              onClick={onNavigate}
+              className={cn(
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                active
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+              )}
+            >
+              {Icon ? <Icon className="h-4 w-4 shrink-0" /> : null}
+              <span className="truncate">{node.label}</span>
+            </Link>
+          );
+        }
+
+        const hasActiveChild = node.children.some((child) => isActive(child.href));
+
         return (
-          <Link
-            key={it.href}
-            href={it.href}
-            onClick={onNavigate}
-            className={cn(
-              "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-              active
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-            )}
-          >
-            <Icon className="h-4 w-4 shrink-0" />
-            <span className="truncate">{it.label}</span>
-          </Link>
+          <div key={node.key} className="pt-2 first:pt-0">
+            <div
+              className={cn(
+                "px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]",
+                hasActiveChild ? "text-sidebar-foreground" : "text-sidebar-foreground/55",
+              )}
+            >
+              {node.label}
+            </div>
+
+            <div className="mt-1 space-y-1 pl-3 border-l border-sidebar-border/70 ml-3">
+              {node.children.map((child) => {
+                const active = isActive(child.href);
+                const Icon = child.icon;
+                return (
+                  <Link
+                    key={child.href}
+                    href={child.href}
+                    onClick={onNavigate}
+                    className={cn(
+                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                      active
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                        : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+                    )}
+                  >
+                    {Icon ? <Icon className="h-4 w-4 shrink-0" /> : null}
+                    <span className="truncate">{child.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
         );
       })}
     </nav>
