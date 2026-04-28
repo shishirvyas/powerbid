@@ -143,6 +143,12 @@ function drawFooter(_page: PDFPage, _font: import("pdf-lib").PDFFont) {
   // Footer artwork/address is already present in the letter template image.
 }
 
+function drawHeaderLogo(page: PDFPage, logo: PDFImage | null) {
+  // Logo is intentionally disabled for PDF exports.
+  void page;
+  void logo;
+}
+
 function drawHeaderPage1(
   page: PDFPage,
   logo: PDFImage | null,
@@ -151,6 +157,8 @@ function drawHeaderPage1(
   dateStr: string,
 ) {
   const { sans, sansBold, italic } = fonts;
+
+  drawHeaderLogo(page, logo);
 
   const title = "Price Quotation";
   const titleSize = 17;
@@ -175,7 +183,7 @@ function drawHeaderPageStandard(
   dateStr: string,
 ) {
   const { sans, sansBold } = fonts;
-  void logo;
+  drawHeaderLogo(page, logo);
   void sansBold;
   void refNo;
 
@@ -363,15 +371,8 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     }
 
     y -= 6;
-    if (logoImage) {
-      const logoH = 24;
-      const logoW = (logoImage.width / logoImage.height) * logoH;
-      page1.drawImage(logoImage, { x: MARGIN_X, y: y - logoH + 4, width: logoW, height: logoH });
-      y -= logoH + 6;
-    } else {
-      page1.drawText("For LAN Engineering & Technologies", { x: MARGIN_X, y, size: 10, font: fontSansBold });
-      y -= 14;
-    }
+    page1.drawText("For LAN Engineering & Technologies", { x: MARGIN_X, y, size: 10, font: fontSansBold });
+    y -= 14;
     y -= 14;
     if (q.signatureMode === "typed" && q.signatureData) {
       page1.drawText(q.signatureData, { x: MARGIN_X, y, size: 15, font: fontSansBold, color: rgb(0.08, 0.14, 0.35) });
@@ -543,15 +544,8 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     // Signature again on last page
     ({ page, y } = ensureSpace(page, y, 90, PAGE_OTHER_TOP, createStandardPage));
     y -= 10;
-    if (logoImage) {
-      const logoH = 24;
-      const logoW = (logoImage.width / logoImage.height) * logoH;
-      page.drawImage(logoImage, { x: MARGIN_X, y: y - logoH + 4, width: logoW, height: logoH });
-      y -= logoH + 6;
-    } else {
-      page.drawText("For LAN Engineering & Technologies", { x: MARGIN_X, y, size: 10, font: fontSansBold });
-      y -= 14;
-    }
+    page.drawText("For LAN Engineering & Technologies", { x: MARGIN_X, y, size: 10, font: fontSansBold });
+    y -= 14;
     y -= 12;
     if (q.signatureMode === "typed" && q.signatureData) {
       page.drawText(q.signatureData, { x: MARGIN_X, y, size: 14, font: fontSansBold, color: rgb(0.08, 0.14, 0.35) });
