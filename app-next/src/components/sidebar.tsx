@@ -83,7 +83,7 @@ const navConfig: NavNode[] = [
 function Brand() {
   return (
     <div className="flex items-center gap-2 px-5 h-16 border-b border-sidebar-border">
-      <BrandLogo compact invert className="[&_svg]:h-8 [&_svg]:w-8" />
+      <BrandLogo compact className="" />
     </div>
   );
 }
