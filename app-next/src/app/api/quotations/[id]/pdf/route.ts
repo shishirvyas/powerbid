@@ -4,14 +4,13 @@ import { PDFDocument, PDFImage, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import { readFile } from "fs/promises";
 import path from "path";
 import { db } from "@/lib/db";
-import { customers, quotationItems, quotations } from "@/lib/db/schema";
+import { customers, quotationAttachments, quotationItems, quotations } from "@/lib/db/schema";
 import { ApiError, errorToResponse, parseId, requireSession } from "@/lib/api";
 import {
   DEFAULT_SIGNER_DESIGNATION,
   DEFAULT_SIGNER_MOBILE,
   DEFAULT_SIGNER_NAME,
 } from "@/lib/branding";
-import { listAttachments } from "@/lib/attachment-store";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -530,7 +529,15 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       y -= 2;
     }
 
-    const annexures = listAttachments("quotations", q.id);
+    const annexures = await db
+      .select({
+        fileName: quotationAttachments.fileName,
+        filePath: quotationAttachments.filePath,
+        mimeType: quotationAttachments.mimeType,
+      })
+      .from(quotationAttachments)
+      .where(eq(quotationAttachments.quotationId, q.id))
+      .orderBy(asc(quotationAttachments.sortOrder), asc(quotationAttachments.id));
     if (annexures.length > 0) {
       ({ page, y } = ensureSpace(page, y, 20 + annexures.length * 11, PAGE_OTHER_TOP, createStandardPage));
       page.drawText("Annexures", { x: MARGIN_X, y, size: 9.6, font: fontSansBold, color: rgb(0.08, 0.16, 0.36) });
@@ -563,6 +570,58 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     ].filter(Boolean)) {
       page.drawText(line, { x: MARGIN_X, y, size: 9, font: fontSans });
       y -= 11;
+    }
+
+    // Render image annexures on dedicated pages so users can preview attachments in PDF.
+    let annexureIndex = 1;
+    for (const annexure of annexures) {
+      const fileExt = path.extname(annexure.filePath || annexure.fileName).toLowerCase();
+      const isImage = (annexure.mimeType || "").startsWith("image/") || [".png", ".jpg", ".jpeg"].includes(fileExt);
+      if (!isImage) continue;
+
+      const annexurePage = createStandardPage();
+      let annexureY = PAGE_OTHER_TOP;
+      const annexureTitle = `Annexure ${annexureIndex}`;
+      const annexureTitleW = fontSansBold.widthOfTextAtSize(annexureTitle, 11);
+      annexurePage.drawText(annexureTitle, {
+        x: MARGIN_X,
+        y: annexureY,
+        size: 11,
+        font: fontSansBold,
+        color: rgb(0.08, 0.16, 0.36),
+      });
+      drawUnderline(annexurePage, MARGIN_X, annexureY, annexureTitleW, rgb(0.08, 0.16, 0.36));
+      annexureY -= 16;
+
+      const labelLines = wrapText(annexure.fileName, fontSans, 8.6, PW - MARGIN_X * 2);
+      for (const labelLine of labelLines) {
+        annexurePage.drawText(labelLine, { x: MARGIN_X, y: annexureY, size: 8.6, font: fontSans, color: rgb(0.2, 0.24, 0.3) });
+        annexureY -= 11;
+      }
+      annexureY -= 6;
+
+      try {
+        const bytes = await readFile(path.join(process.cwd(), annexure.filePath));
+        const embedded = fileExt === ".jpg" || fileExt === ".jpeg" ? await pdf.embedJpg(bytes) : await pdf.embedPng(bytes);
+        const maxWidth = PW - MARGIN_X * 2;
+        const maxHeight = annexureY - PAGE_BOTTOM;
+        const scale = Math.min(maxWidth / embedded.width, maxHeight / embedded.height, 1);
+        const drawW = embedded.width * scale;
+        const drawH = embedded.height * scale;
+        const drawX = (PW - drawW) / 2;
+        const drawY = Math.max(PAGE_BOTTOM, annexureY - drawH);
+        annexurePage.drawImage(embedded, { x: drawX, y: drawY, width: drawW, height: drawH });
+      } catch {
+        annexurePage.drawText("Unable to render annexure image.", {
+          x: MARGIN_X,
+          y: annexureY,
+          size: 9,
+          font: fontSans,
+          color: rgb(0.55, 0.2, 0.2),
+        });
+      }
+
+      annexureIndex += 1;
     }
 
     const pdfBytes = await pdf.save();
