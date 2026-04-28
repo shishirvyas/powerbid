@@ -20,7 +20,7 @@ const PH = 841.89;
 const MARGIN_X = 50;
 const PAGE_BOTTOM = 112;
 const PAGE1_TOP = 620;
-const PAGE_OTHER_TOP = 700;
+const PAGE_OTHER_TOP = 640;
 
 function htmlToPlain(html: string | null | undefined): string {
   if (!html) return "";
@@ -160,7 +160,7 @@ function drawHeaderPage1(
   page.drawText(title, { x: tx, y: ty, size: titleSize, font: italic, color: rgb(0.08, 0.12, 0.22) });
   drawUnderline(page, tx, ty, tw, rgb(0.08, 0.12, 0.22));
 
-  page.drawLine({ start: { x: MARGIN_X, y: 688 }, end: { x: PW - MARGIN_X, y: 688 }, thickness: 0.7, color: rgb(0.76, 0.8, 0.86) });
+  page.drawLine({ start: { x: MARGIN_X, y: 720 }, end: { x: PW - MARGIN_X, y: 720 }, thickness: 0.7, color: rgb(0.76, 0.8, 0.86) });
   page.drawText(`Ref: ${refNo}`, { x: MARGIN_X, y: 663, size: 10, font: sansBold, color: rgb(0.08, 0.12, 0.22) });
   const dateLabel = `Date: ${dateStr}`;
   const dw = sans.widthOfTextAtSize(dateLabel, 10);
@@ -179,7 +179,7 @@ function drawHeaderPageStandard(
   void sansBold;
   void refNo;
 
-  page.drawLine({ start: { x: MARGIN_X, y: 688 }, end: { x: PW - MARGIN_X, y: 688 }, thickness: 0.7, color: rgb(0.76, 0.8, 0.86) });
+  page.drawLine({ start: { x: MARGIN_X, y: 720 }, end: { x: PW - MARGIN_X, y: 720 }, thickness: 0.7, color: rgb(0.76, 0.8, 0.86) });
   const dateLabel = `Date: ${dateStr}`;
   const dw = sans.widthOfTextAtSize(dateLabel, 10);
   page.drawText(dateLabel, { x: PW - MARGIN_X - dw, y: 663, size: 10, font: sans, color: rgb(0.2, 0.24, 0.3) });
@@ -363,8 +363,16 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     }
 
     y -= 6;
-    page1.drawText("For LAN Engineering & Technologies", { x: MARGIN_X, y, size: 10, font: fontSansBold });
-    y -= 28;
+    if (logoImage) {
+      const logoH = 24;
+      const logoW = (logoImage.width / logoImage.height) * logoH;
+      page1.drawImage(logoImage, { x: MARGIN_X, y: y - logoH + 4, width: logoW, height: logoH });
+      y -= logoH + 6;
+    } else {
+      page1.drawText("For LAN Engineering & Technologies", { x: MARGIN_X, y, size: 10, font: fontSansBold });
+      y -= 14;
+    }
+    y -= 14;
     if (q.signatureMode === "typed" && q.signatureData) {
       page1.drawText(q.signatureData, { x: MARGIN_X, y, size: 15, font: fontSansBold, color: rgb(0.08, 0.14, 0.35) });
       y -= 20;
@@ -535,8 +543,16 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     // Signature again on last page
     ({ page, y } = ensureSpace(page, y, 90, PAGE_OTHER_TOP, createStandardPage));
     y -= 10;
-    page.drawText("For LAN Engineering & Technologies", { x: MARGIN_X, y, size: 10, font: fontSansBold });
-    y -= 26;
+    if (logoImage) {
+      const logoH = 24;
+      const logoW = (logoImage.width / logoImage.height) * logoH;
+      page.drawImage(logoImage, { x: MARGIN_X, y: y - logoH + 4, width: logoW, height: logoH });
+      y -= logoH + 6;
+    } else {
+      page.drawText("For LAN Engineering & Technologies", { x: MARGIN_X, y, size: 10, font: fontSansBold });
+      y -= 14;
+    }
+    y -= 12;
     if (q.signatureMode === "typed" && q.signatureData) {
       page.drawText(q.signatureData, { x: MARGIN_X, y, size: 14, font: fontSansBold, color: rgb(0.08, 0.14, 0.35) });
       y -= 18;
