@@ -1,4 +1,4 @@
-export const APP_NAME = "BID";
+export const APP_NAME = "LAN";
 export const APP_SUBTITLE = "Quotation Suite";
 
 export const COMPANY_NAME = "LAN Engineering & Technologies";

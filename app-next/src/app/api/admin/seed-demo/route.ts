@@ -99,18 +99,18 @@ export async function POST(req: Request) {
   const insertedProducts = await db
     .insert(products)
     .values([
-      { sku: "MCB-C32", name: "MCB 32A C-Curve", brandId: insertedBrands[0].id, unitId: insertedUnits[0].id, gstSlabId: gst18.id, basePrice: "320" },
-      { sku: "MCB-C16", name: "MCB 16A C-Curve", brandId: insertedBrands[1].id, unitId: insertedUnits[0].id, gstSlabId: gst18.id, basePrice: "240" },
-      { sku: "RCCB-40A", name: "RCCB 40A 30mA", brandId: insertedBrands[2].id, unitId: insertedUnits[0].id, gstSlabId: gst18.id, basePrice: "1850" },
-      { sku: "CON-9A", name: "Contactor 9A", brandId: insertedBrands[0].id, unitId: insertedUnits[0].id, gstSlabId: gst18.id, basePrice: "1200" },
-      { sku: "CON-25A", name: "Contactor 25A", brandId: insertedBrands[2].id, unitId: insertedUnits[0].id, gstSlabId: gst18.id, basePrice: "2400" },
-      { sku: "DB-8W", name: "Distribution Board 8 Way", brandId: insertedBrands[3].id, unitId: insertedUnits[0].id, gstSlabId: gst18.id, basePrice: "1450" },
-      { sku: "SW-16A", name: "Modular Switch 16A", brandId: insertedBrands[3].id, unitId: insertedUnits[0].id, gstSlabId: gst18.id, basePrice: "120" },
-      { sku: "WIRE-2.5", name: "Copper Wire 2.5 sqmm", brandId: insertedBrands[5].id, unitId: insertedUnits[5].id, gstSlabId: gst18.id, basePrice: "2800" },
-      { sku: "WIRE-4.0", name: "Copper Wire 4.0 sqmm", brandId: insertedBrands[5].id, unitId: insertedUnits[5].id, gstSlabId: gst18.id, basePrice: "4400" },
-      { sku: "CABLE-3C", name: "3C Armoured Cable 4 sqmm", brandId: insertedBrands[5].id, unitId: insertedUnits[1].id, gstSlabId: gst18.id, basePrice: "180" },
-      { sku: "LED-18W", name: "LED Panel 18W", brandId: insertedBrands[4].id, unitId: insertedUnits[0].id, gstSlabId: gst18.id, basePrice: "650" },
-      { sku: "FAN-CEIL", name: "Ceiling Fan 1200mm", brandId: insertedBrands[4].id, unitId: insertedUnits[0].id, gstSlabId: gst28.id, basePrice: "2200" },
+      { sku: "MCB-C32", name: "MCB 32A C-Curve", unitId: insertedUnits[0].id, hsmCode: "853620" },
+      { sku: "MCB-C16", name: "MCB 16A C-Curve", unitId: insertedUnits[0].id, hsmCode: "853620" },
+      { sku: "RCCB-40A", name: "RCCB 40A 30mA", unitId: insertedUnits[0].id, hsmCode: "853630" },
+      { sku: "CON-9A", name: "Contactor 9A", unitId: insertedUnits[0].id, hsmCode: "853649" },
+      { sku: "CON-25A", name: "Contactor 25A", unitId: insertedUnits[0].id, hsmCode: "853649" },
+      { sku: "DB-8W", name: "Distribution Board 8 Way", unitId: insertedUnits[0].id, hsmCode: "853710" },
+      { sku: "SW-16A", name: "Modular Switch 16A", unitId: insertedUnits[0].id, hsmCode: "853650" },
+      { sku: "WIRE-2.5", name: "Copper Wire 2.5 sqmm", unitId: insertedUnits[5].id, hsmCode: "854449" },
+      { sku: "WIRE-4.0", name: "Copper Wire 4.0 sqmm", unitId: insertedUnits[5].id, hsmCode: "854449" },
+      { sku: "CABLE-3C", name: "3C Armoured Cable 4 sqmm", unitId: insertedUnits[1].id, hsmCode: "854460" },
+      { sku: "LED-18W", name: "LED Panel 18W", unitId: insertedUnits[0].id, hsmCode: "940511" },
+      { sku: "FAN-CEIL", name: "Ceiling Fan 1200mm", unitId: insertedUnits[0].id, hsmCode: "841451" },
     ])
     .returning();
 
@@ -138,12 +138,13 @@ export async function POST(req: Request) {
   );
 
   // ---- inquiries ----
+  const inquiryDate = new Date().toISOString().slice(0, 10);
   const insertedInquiries = await db
     .insert(inquiries)
     .values([
-      { inquiryNo: "INQ-2025-0001", customerId: insertedCustomers[0].id, customerName: insertedCustomers[0].name, source: "phone", priority: "high", status: "in_progress", requirement: "Need MCBs and DBs for residential project", assignedTo: sales.id },
-      { inquiryNo: "INQ-2025-0002", customerId: insertedCustomers[2].id, customerName: insertedCustomers[2].name, source: "email", priority: "medium", status: "quoted", requirement: "Cable and wire requirement for warehouse", assignedTo: sales.id },
-      { inquiryNo: "INQ-2025-0003", customerId: insertedCustomers[4].id, customerName: insertedCustomers[4].name, source: "walkin", priority: "urgent", status: "new", requirement: "Bulk fans and LED panels", assignedTo: admin.id },
+      { inquiryNo: "INQ-2025-0001", customerId: insertedCustomers[0].id, customerName: insertedCustomers[0].name, source: "phone", status: "in_progress", dateOfInquiry: inquiryDate, referenceNumber: "REF-001", requirement: "Need MCBs and DBs for residential project", assignedTo: sales.id },
+      { inquiryNo: "INQ-2025-0002", customerId: insertedCustomers[2].id, customerName: insertedCustomers[2].name, source: "email", status: "quoted", dateOfInquiry: inquiryDate, referenceNumber: "REF-002", requirement: "Cable and wire requirement for warehouse", assignedTo: sales.id },
+      { inquiryNo: "INQ-2025-0003", customerId: insertedCustomers[4].id, customerName: insertedCustomers[4].name, source: "walkin", status: "new", dateOfInquiry: inquiryDate, referenceNumber: "REF-003", requirement: "Bulk fans and LED panels", assignedTo: admin.id },
     ])
     .returning();
 

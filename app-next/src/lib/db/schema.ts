@@ -99,14 +99,11 @@ export const products = pgTable(
   "products",
   {
     id: serial("id").primaryKey(),
-    sku: text("sku").notNull(),
+    sku: text("sku"),
     name: text("name").notNull(),
     description: text("description"),
-    brandId: integer("brand_id").references(() => brands.id),
     unitId: integer("unit_id").references(() => units.id),
-    gstSlabId: integer("gst_slab_id").references(() => gstSlabs.id),
-    basePrice: numeric("base_price", { precision: 12, scale: 2 }).notNull().default("0"),
-    isActive: boolean("is_active").notNull().default(true),
+    hsmCode: text("hsm_code"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -124,10 +121,11 @@ export const inquiries = pgTable(
     }),
     customerName: text("customer_name"),
     source: text("source").notNull().default("walkin"), // walkin/phone/email/web/other
-    priority: text("priority").notNull().default("medium"), // low/medium/high/urgent
     status: text("status").notNull().default("new"), // new/in_progress/quoted/won/lost/closed
     requirement: text("requirement"),
     expectedClosure: text("expected_closure"),
+      dateOfInquiry: text("date_of_inquiry"),
+      referenceNumber: text("reference_number"),
     assignedTo: integer("assigned_to").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -148,6 +146,7 @@ export const inquiryItems = pgTable(
       .references(() => inquiries.id, { onDelete: "cascade" }),
     productId: integer("product_id").references(() => products.id, { onDelete: "set null" }),
     productName: text("product_name").notNull(),
+    unitName: text("unit_name"),
     qty: numeric("qty", { precision: 12, scale: 2 }).notNull().default("1"),
     remarks: text("remarks"),
   },
@@ -174,6 +173,9 @@ export const quotations = pgTable(
       .notNull()
       .references(() => customers.id, { onDelete: "restrict" }),
     contactPersonId: integer("contact_person_id").references(() => customerContacts.id, {
+      onDelete: "set null",
+    }),
+    subjectTemplateId: integer("subject_template_id").references(() => subjectTemplates.id, {
       onDelete: "set null",
     }),
     status: text("status").notNull().default("draft"),
@@ -226,6 +228,7 @@ export const quotationItems = pgTable(
     unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull().default("0"),
     discountPercent: numeric("discount_percent", { precision: 5, scale: 2 }).notNull().default("0"),
     gstRate: numeric("gst_rate", { precision: 5, scale: 2 }).notNull().default("18"),
+    gstSlabId: integer("gst_slab_id").references(() => gstSlabs.id, { onDelete: "set null" }),
     lineSubtotal: numeric("line_subtotal", { precision: 14, scale: 2 }).notNull().default("0"),
     lineGst: numeric("line_gst", { precision: 14, scale: 2 }).notNull().default("0"),
     lineTotal: numeric("line_total", { precision: 14, scale: 2 }).notNull().default("0"),
@@ -298,5 +301,44 @@ export const communicationTemplates = pgTable(
   (t) => ({
     uqTemplate: uniqueIndex("uq_comm_templates_channel_key").on(t.channel, t.templateKey),
     idxActive: index("idx_comm_templates_active").on(t.isActive),
+  }),
+);
+
+/* --------------------- Subject Templates Master ---------------------- */
+export const subjectTemplates = pgTable(
+  "subject_templates",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name").notNull().unique(),
+    subjectText: text("subject_text").notNull(),
+    introParagraph: text("intro_paragraph"),
+    isDefault: boolean("is_default").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    uqName: uniqueIndex("uq_subject_templates_name").on(t.name),
+    idxDefault: index("idx_subject_templates_is_default").on(t.isDefault),
+  }),
+);
+
+/* -------------------- Quotation Attachments ----------------------- */
+export const quotationAttachments = pgTable(
+  "quotation_attachments",
+  {
+    id: serial("id").primaryKey(),
+    quotationId: integer("quotation_id")
+      .notNull()
+      .references(() => quotations.id, { onDelete: "cascade" }),
+    fileName: text("file_name").notNull(),
+    filePath: text("file_path").notNull(),
+    fileSize: integer("file_size"),
+    mimeType: text("mime_type"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    idxQuotation: index("idx_quotation_attachments_quotation").on(t.quotationId),
   }),
 );

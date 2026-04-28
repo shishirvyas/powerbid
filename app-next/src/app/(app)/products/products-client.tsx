@@ -40,57 +40,41 @@ import { formatCurrency } from "@/lib/calc";
 
 type Product = {
   id: number;
-  sku: string;
+  sku: string | null;
   name: string;
   description: string | null;
-  brandId: number | null;
-  brandName: string | null;
   unitId: number | null;
   unitCode: string | null;
   unitName: string | null;
-  gstSlabId: number | null;
-  gstName: string | null;
-  gstRate: string | null;
-  basePrice: string;
-  isActive: boolean;
+  hsmCode: string | null;
 };
 
 type Masters = {
-  brands: { id: number; name: string; isActive: boolean }[];
   units: { id: number; code: string; name: string; isActive: boolean }[];
-  gstSlabs: { id: number; name: string; rate: string; isActive: boolean }[];
 };
 
 type ProductForm = {
   sku: string;
   name: string;
   description: string;
-  brandId: string;
   unitId: string;
-  gstSlabId: string;
-  basePrice: string;
-  isActive: boolean;
+  hsmCode: string;
 };
 
 const empty: ProductForm = {
   sku: "",
   name: "",
   description: "",
-  brandId: "",
   unitId: "",
-  gstSlabId: "",
-  basePrice: "0",
-  isActive: true,
+  hsmCode: "",
 };
 
 const labelMap: Record<string, string> = {
   sku: "SKU",
   name: "Name",
   description: "Description",
-  brandId: "Brand",
   unitId: "Unit",
-  gstSlabId: "GST slab",
-  basePrice: "Base price",
+  hsmCode: "HSM Code",
 };
 
 export function ProductsClient() {
@@ -165,33 +149,21 @@ export function ProductsClient() {
               <TableRow>
                 <TableHead>SKU</TableHead>
                 <TableHead>Name</TableHead>
-                <TableHead className="hidden md:table-cell">Brand</TableHead>
                 <TableHead className="hidden md:table-cell">Unit</TableHead>
-                <TableHead className="hidden lg:table-cell">GST</TableHead>
-                <TableHead className="text-right">Base price</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead className="hidden md:table-cell">HSM Code</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading && !data ? (
-                <TableSkeleton cols={8} rows={6} />
+                <TableSkeleton cols={5} rows={6} />
               ) : (
                 data?.rows.map((p) => (
                   <TableRow key={p.id} className="transition-colors hover:bg-muted/40">
-                    <TableCell className="font-mono text-xs">{p.sku}</TableCell>
+                    <TableCell className="font-mono text-xs">{p.sku || "—"}</TableCell>
                     <TableCell className="font-medium">{p.name}</TableCell>
-                    <TableCell className="hidden md:table-cell text-sm">{p.brandName || "—"}</TableCell>
                     <TableCell className="hidden md:table-cell text-sm">{p.unitCode || "—"}</TableCell>
-                    <TableCell className="hidden lg:table-cell text-sm">
-                      {p.gstName ? `${p.gstName} (${p.gstRate}%)` : "—"}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{formatCurrency(p.basePrice)}</TableCell>
-                    <TableCell>
-                      <Badge variant={p.isActive ? "success" : "muted"}>
-                        {p.isActive ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-sm">{p.hsmCode || "—"}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         <Button
@@ -287,14 +259,11 @@ function ProductFormDialog({
       setForm(
         editing
           ? {
-              sku: editing.sku,
+              sku: editing.sku ?? "",
               name: editing.name,
               description: editing.description ?? "",
-              brandId: editing.brandId ? String(editing.brandId) : "",
               unitId: editing.unitId ? String(editing.unitId) : "",
-              gstSlabId: editing.gstSlabId ? String(editing.gstSlabId) : "",
-              basePrice: editing.basePrice ?? "0",
-              isActive: editing.isActive,
+              hsmCode: editing.hsmCode ?? "",
             }
           : empty,
       );
@@ -308,13 +277,7 @@ function ProductFormDialog({
 
   function clientValidate(): Record<string, string> {
     const next: Record<string, string> = {};
-    if (!form.sku.trim()) next.sku = "SKU is required";
     if (!form.name.trim()) next.name = "Name is required";
-    if (form.basePrice === "" || Number.isNaN(Number(form.basePrice))) {
-      next.basePrice = "Enter a valid base price";
-    } else if (Number(form.basePrice) < 0) {
-      next.basePrice = "Base price cannot be negative";
-    }
     return next;
   }
 
@@ -328,14 +291,11 @@ function ProductFormDialog({
     }
     setSaving(true);
     const payload = {
-      sku: form.sku,
+      sku: form.sku || null,
       name: form.name,
       description: form.description || null,
-      brandId: form.brandId ? Number(form.brandId) : null,
       unitId: form.unitId ? Number(form.unitId) : null,
-      gstSlabId: form.gstSlabId ? Number(form.gstSlabId) : null,
-      basePrice: form.basePrice || "0",
-      isActive: form.isActive,
+      hsmCode: form.hsmCode || null,
     };
     try {
       if (editing) {
@@ -371,21 +331,11 @@ function ProductFormDialog({
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="SKU" required error={errors.sku}>
+            <FormField label="SKU" error={errors.sku}>
               <Input value={form.sku} onChange={(e) => update("sku", e.target.value)} maxLength={80} />
             </FormField>
             <FormField label="Name" required error={errors.name}>
               <Input value={form.name} onChange={(e) => update("name", e.target.value)} />
-            </FormField>
-            <FormField label="Brand" error={errors.brandId}>
-              <Select value={form.brandId} onChange={(e) => update("brandId", e.target.value)}>
-                <option value="">—</option>
-                {masters?.brands.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </Select>
             </FormField>
             <FormField label="Unit" error={errors.unitId}>
               <Select value={form.unitId} onChange={(e) => update("unitId", e.target.value)}>
@@ -397,33 +347,8 @@ function ProductFormDialog({
                 ))}
               </Select>
             </FormField>
-            <FormField label="GST slab" error={errors.gstSlabId}>
-              <Select value={form.gstSlabId} onChange={(e) => update("gstSlabId", e.target.value)}>
-                <option value="">—</option>
-                {masters?.gstSlabs.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name} ({g.rate}%)
-                  </option>
-                ))}
-              </Select>
-            </FormField>
-            <FormField label="Base price (INR)" required error={errors.basePrice}>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={form.basePrice}
-                onChange={(e) => update("basePrice", e.target.value)}
-              />
-            </FormField>
-            <FormField label="Status">
-              <Select
-                value={form.isActive ? "1" : "0"}
-                onChange={(e) => update("isActive", e.target.value === "1")}
-              >
-                <option value="1">Active</option>
-                <option value="0">Inactive</option>
-              </Select>
+            <FormField label="HSM Code" error={errors.hsmCode}>
+              <Input value={form.hsmCode} onChange={(e) => update("hsmCode", e.target.value)} />
             </FormField>
             <FormField label="Description" className="sm:col-span-2" error={errors.description}>
               <Textarea

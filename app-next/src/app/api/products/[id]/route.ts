@@ -33,12 +33,14 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
     await requireSession();
     const id = parseId((await ctx.params).id);
     const data = await parseJson(req, productSchema);
-    const dup = await db
-      .select({ id: products.id })
-      .from(products)
-      .where(and(eq(products.sku, data.sku), ne(products.id, id)))
-      .limit(1);
-    if (dup.length) throw new ApiError(409, `SKU "${data.sku}" already exists`);
+    if (data.sku) {
+      const dup = await db
+        .select({ id: products.id })
+        .from(products)
+        .where(and(eq(products.sku, data.sku), ne(products.id, id)))
+        .limit(1);
+      if (dup.length) throw new ApiError(409, `SKU "${data.sku}" already exists`);
+    }
     const [row] = await db
       .update(products)
       .set({ ...data, updatedAt: new Date() })

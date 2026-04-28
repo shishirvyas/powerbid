@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { products, brands, units, gstSlabs } from "@/lib/db/schema";
+import { products, units } from "@/lib/db/schema";
 import {
   ApiError,
   errorToResponse,
@@ -27,22 +27,14 @@ export async function GET(req: NextRequest) {
         sku: products.sku,
         name: products.name,
         description: products.description,
-        brandId: products.brandId,
         unitId: products.unitId,
-        gstSlabId: products.gstSlabId,
-        basePrice: products.basePrice,
-        isActive: products.isActive,
+        hsmCode: products.hsmCode,
         createdAt: products.createdAt,
-        brandName: brands.name,
         unitCode: units.code,
         unitName: units.name,
-        gstName: gstSlabs.name,
-        gstRate: gstSlabs.rate,
       })
       .from(products)
-      .leftJoin(brands, eq(products.brandId, brands.id))
       .leftJoin(units, eq(products.unitId, units.id))
-      .leftJoin(gstSlabs, eq(products.gstSlabId, gstSlabs.id))
       .where(where)
       .orderBy(desc(products.createdAt))
       .limit(limit)
@@ -61,8 +53,10 @@ export async function POST(req: NextRequest) {
   try {
     await requireSession();
     const data = await parseJson(req, productSchema);
-    const exists = await db.select({ id: products.id }).from(products).where(eq(products.sku, data.sku)).limit(1);
-    if (exists.length) throw new ApiError(409, `SKU "${data.sku}" already exists`);
+    if (data.sku) {
+      const exists = await db.select({ id: products.id }).from(products).where(eq(products.sku, data.sku)).limit(1);
+      if (exists.length) throw new ApiError(409, `SKU "${data.sku}" already exists`);
+    }
     const [row] = await db.insert(products).values(data).returning();
     return jsonOk(row, { status: 201 });
   } catch (err) {

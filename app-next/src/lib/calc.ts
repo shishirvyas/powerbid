@@ -29,16 +29,14 @@ export function calcQuotation(input: QuotationCalcInput): QuotationCalcResult {
   const lines: QuotationCalcLine[] = input.items.map((it) => {
     const qty = Number(it.qty) || 0;
     const price = Number(it.unitPrice) || 0;
-    const disc = Number(it.discountPercent) || 0;
     const rate = Number(it.gstRate) || 0;
     const gross = qty * price;
-    const lineSubtotal = round(gross - (gross * disc) / 100);
+    const lineSubtotal = round(gross);
     const lineGst = round((lineSubtotal * rate) / 100);
     return {
       ...it,
       qty,
       unitPrice: price,
-      discountPercent: disc,
       gstRate: rate,
       lineSubtotal,
       lineGst,

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { Typeahead, type TypeaheadOption } from "@/components/typeahead";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RichTextEditor } from "@/components/rich-text-editor";
 import { useList, useResource } from "@/lib/hooks";
@@ -19,7 +19,6 @@ import { api, ApiClientError } from "@/lib/api-client";
 import { calcQuotation, formatCurrency } from "@/lib/calc";
 import { SIGNATURE_PRESETS } from "@/lib/branding";
 import { cn } from "@/lib/utils";
-import { parseQtyBreakup, stringifyQtyBreakup, sumQtyBreakup } from "@/lib/quotation-format";
 import {
   DEFAULT_COMMERCIAL_TERMS,
   DEFAULT_INTRO_PARAGRAPH,
@@ -37,35 +36,39 @@ const labelMap: Record<string, string> = {
   referenceNo: "Ref number",
   quotationDate: "Date",
   subject: "Subject",
+  subjectTemplateId: "Subject template",
   projectName: "Project name",
   customerAttention: "Kind attention",
   validityDays: "Validity",
-  status: "Status",
-  currency: "Currency",
-  discountType: "Discount type",
-  discountValue: "Discount value",
-  freightAmount: "Freight",
   items: "Line items",
   productName: "Product name",
   unitName: "Unit",
   qty: "Qty",
-  qtyBreakup: "Qty breakup",
   unitPrice: "Unit price",
-  discountPercent: "Discount %",
-  gstRate: "GST %",
+  gstSlabId: "GST slab",
 };
 
 type SectionKey = "basic" | "items" | "commercial" | "attachments" | "signature";
-type SignatureMode = "upload" | "draw" | "typed";
+type SignatureMode = "upload" | "draw" | "typed" | "blank";
 
 type CustomerOption = { id: number; code: string; name: string };
 type ProductOption = {
   id: number;
-  sku: string;
+  sku: string | null;
   name: string;
-  basePrice: string;
+  hsmCode: string | null;
+  unitId: number | null;
+  unitCode: string | null;
   unitName: string | null;
-  gstRate: string | null;
+};
+type GstSlabOption = { id: number; name: string; rate: string; isActive: boolean };
+type SubjectTemplateOption = {
+  id: number;
+  name: string;
+  subjectText: string;
+  introParagraph: string | null;
+  isDefault: boolean;
+  isActive: boolean;
 };
 
 export type QuotationBuilderInitial = {
@@ -80,6 +83,7 @@ export type QuotationBuilderInitial = {
   customerId: number | null;
   contactPersonId: number | null;
   inquiryId: number | null;
+  subjectTemplateId: number | null;
   status: "draft" | "sent" | "won" | "lost" | "expired" | "cancelled";
   currency: string;
   discountType: "percent" | "amount";
@@ -100,12 +104,12 @@ export type QuotationBuilderInitial = {
 
 type BuilderItem = {
   productId: string;
+  productQuery: string;
   productName: string;
   unitName: string;
-  qtyBreakup: string;
   qty: string;
   unitPrice: string;
-  discountPercent: string;
+  gstSlabId: string;
   gstRate: string;
 };
 
@@ -122,6 +126,7 @@ export const blankInitial: QuotationBuilderInitial = {
   customerId: null,
   contactPersonId: null,
   inquiryId: null,
+  subjectTemplateId: null,
   status: "draft",
   currency: "INR",
   discountType: "percent",
@@ -140,13 +145,13 @@ export const blankInitial: QuotationBuilderInitial = {
   items: [
     {
       productId: "",
+      productQuery: "",
       productName: "",
       unitName: "",
-      qtyBreakup: "",
       qty: "1",
       unitPrice: "0",
-      discountPercent: "0",
-      gstRate: "18",
+      gstSlabId: "",
+      gstRate: "0",
     },
   ],
 };
@@ -175,6 +180,7 @@ function scrollToSection(section: SectionKey) {
 export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderInitial; mode: "create" | "edit" }) {
   const router = useRouter();
   const [form, setForm] = React.useState<QuotationBuilderInitial>(initial);
+  const [customerQuery, setCustomerQuery] = React.useState("");
   const [pendingAttachments, setPendingAttachments] = React.useState<File[]>([]);
   const [saving, setSaving] = React.useState(false);
   const { errors, set: setErrors, setOne } = useFieldErrors();
@@ -182,18 +188,37 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
 
   const { data: customers } = useList<CustomerOption>("/api/customers", { limit: 200 });
   const { data: products } = useList<ProductOption>("/api/products", { limit: 200 });
+  const { data: masters } = useResource<{ gstSlabs: GstSlabOption[] }>("/api/masters");
+  const { data: subjectTemplates } = useList<SubjectTemplateOption>("/api/masters/subject-templates", { limit: 200 });
+
+  React.useEffect(() => {
+    if (!customers?.rows || !form.customerId) return;
+    const picked = customers.rows.find((c) => c.id === form.customerId);
+    if (picked) setCustomerQuery(`${picked.code} - ${picked.name}`);
+  }, [customers, form.customerId]);
+
+  React.useEffect(() => {
+    if (!subjectTemplates?.rows || form.subjectTemplateId || mode !== "create") return;
+    const def = subjectTemplates.rows.find((t) => t.isDefault && t.isActive);
+    if (!def) return;
+    setForm((f) => ({
+      ...f,
+      subjectTemplateId: def.id,
+      subject: def.subjectText || f.subject,
+      introText: def.introParagraph || f.introText,
+    }));
+  }, [subjectTemplates, form.subjectTemplateId, mode]);
 
   const calc = React.useMemo(() => {
     return calcQuotation({
       items: form.items.map((it) => ({
-        productId: it.productId ? Number(it.productId) : null,
+        productId: Number(it.productId || 0),
         productName: it.productName || "—",
         unitName: it.unitName || null,
-        qtyBreakup: it.qtyBreakup || null,
         qty: Number(it.qty) || 0,
         unitPrice: Number(it.unitPrice) || 0,
-        discountPercent: Number(it.discountPercent) || 0,
         gstRate: Number(it.gstRate) || 0,
+        gstSlabId: it.gstSlabId ? Number(it.gstSlabId) : null,
       })),
       discountType: form.discountType,
       discountValue: Number(form.discountValue) || 0,
@@ -224,21 +249,6 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
     setForm((f) => {
       const items = [...f.items];
       items[idx] = { ...items[idx], [key]: value };
-      if (key === "productId" && value && products) {
-        const p = products.rows.find((x) => String(x.id) === value);
-        if (p) {
-          items[idx].productName = p.name;
-          items[idx].unitPrice = p.basePrice ?? "0";
-          items[idx].unitName = p.unitName ?? "";
-          items[idx].gstRate = p.gstRate ?? items[idx].gstRate;
-        }
-      }
-      if (key === "qtyBreakup") {
-        const map = parseQtyBreakup(value);
-        const totalQty = sumQtyBreakup(map);
-        if (totalQty > 0) items[idx].qty = String(totalQty);
-        items[idx].qtyBreakup = stringifyQtyBreakup(map);
-      }
       return { ...f, items };
     });
     if (itemErrors[idx]?.[key]) {
@@ -252,6 +262,47 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
       });
     }
   }
+
+  function selectCustomer(option: TypeaheadOption) {
+    const id = Number(option.value);
+    setForm((f) => ({ ...f, customerId: id }));
+    setCustomerQuery(option.label);
+    if (errors.customerId) setOne("customerId", undefined);
+  }
+
+  function selectProduct(idx: number, option: TypeaheadOption) {
+    if (!products?.rows) return;
+    const picked = products.rows.find((p) => String(p.id) === option.value);
+    if (!picked) return;
+    setForm((f) => {
+      const items = [...f.items];
+      items[idx] = {
+        ...items[idx],
+        productId: String(picked.id),
+        productQuery: `${picked.sku ?? "NO-SKU"} - ${picked.name}`,
+        productName: picked.name,
+        unitName: picked.unitCode || picked.unitName || "",
+      };
+      return { ...f, items };
+    });
+  }
+
+  function onSelectTemplate(templateId: string) {
+    const id = templateId ? Number(templateId) : null;
+    if (!id || !subjectTemplates?.rows) {
+      setForm((f) => ({ ...f, subjectTemplateId: null }));
+      return;
+    }
+    const selected = subjectTemplates.rows.find((t) => t.id === id);
+    if (!selected) return;
+    setForm((f) => ({
+      ...f,
+      subjectTemplateId: id,
+      subject: selected.subjectText || f.subject,
+      introText: selected.introParagraph || f.introText,
+    }));
+  }
+
   function addItem() {
     setForm((f) => ({
       ...f,
@@ -259,13 +310,13 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
         ...f.items,
         {
           productId: "",
+          productQuery: "",
           productName: "",
           unitName: "",
-          qtyBreakup: "",
           qty: "1",
           unitPrice: "0",
-          discountPercent: "0",
-          gstRate: "18",
+          gstSlabId: "",
+          gstRate: "0",
         },
       ],
     }));
@@ -278,7 +329,6 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
     const fieldErrors: Record<string, string> = {};
     if (!form.customerId) fieldErrors.customerId = "Pick a customer";
     if (!form.quotationDate) fieldErrors.quotationDate = "Date is required";
-    if (!form.currency || form.currency.length !== 3) fieldErrors.currency = "3-letter currency code (e.g. INR)";
     const validity = Number(form.validityDays);
     if (Number.isNaN(validity) || validity < 0 || validity > 365) fieldErrors.validityDays = "0–365";
 
@@ -290,13 +340,11 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
     form.items.forEach((it, idx) => {
       const row: Record<string, string> = {};
       const isUsed = !!(it.productName.trim() || it.productId);
-      if (isUsed && !it.productName.trim()) row.productName = "Required";
+      if (isUsed && !it.productId) row.productName = "Select product";
       const qty = Number(it.qty);
-      if (isUsed && (Number.isNaN(qty) || qty <= 0)) row.qty = "> 0";
+      if (isUsed && (Number.isNaN(qty) || qty <= 0 || !Number.isInteger(qty))) row.qty = "Whole number > 0";
       const price = Number(it.unitPrice);
       if (isUsed && (Number.isNaN(price) || price < 0)) row.unitPrice = "≥ 0";
-      const disc = Number(it.discountPercent);
-      if (isUsed && (Number.isNaN(disc) || disc < 0 || disc > 100)) row.discountPercent = "0–100";
       const gst = Number(it.gstRate);
       if (isUsed && (Number.isNaN(gst) || gst < 0 || gst > 100)) row.gstRate = "0–100";
       if (Object.keys(row).length) itemErrs[idx] = row;
@@ -322,7 +370,7 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
       toast.error(summary ?? itemSummary ?? "Please fix the highlighted fields");
       return;
     }
-    const items = form.items.filter((it) => it.productName.trim());
+    const items = form.items.filter((it) => it.productId);
     setSaving(true);
     const payload = {
       referenceNo: form.referenceNo || null,
@@ -335,11 +383,12 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
       customerId: form.customerId,
       contactPersonId: form.contactPersonId,
       inquiryId: form.inquiryId,
-      status: form.status,
-      currency: form.currency,
-      discountType: form.discountType,
-      discountValue: Number(form.discountValue) || 0,
-      freightAmount: Number(form.freightAmount) || 0,
+      subjectTemplateId: form.subjectTemplateId,
+      status: "draft" as const,
+      currency: "INR",
+      discountType: "percent" as const,
+      discountValue: 0,
+      freightAmount: 0,
       termsConditions: form.termsConditions || null,
       paymentTerms: form.paymentTerms || null,
       deliverySchedule: form.deliverySchedule || null,
@@ -351,13 +400,12 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
       signatureMobile: form.signatureMobile || null,
       signatureEmail: form.signatureEmail || null,
       items: items.map((it) => ({
-        productId: it.productId ? Number(it.productId) : null,
+        productId: Number(it.productId),
         productName: it.productName,
         unitName: it.unitName || null,
-        qtyBreakup: it.qtyBreakup || null,
         qty: Number(it.qty) || 0,
         unitPrice: Number(it.unitPrice) || 0,
-        discountPercent: Number(it.discountPercent) || 0,
+        gstSlabId: it.gstSlabId ? Number(it.gstSlabId) : null,
         gstRate: Number(it.gstRate) || 0,
       })),
     };
@@ -482,22 +530,21 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
             />
           </Field>
           <Field label="Customer" required error={errors.customerId}>
-            <Select
+            <Typeahead
               value={form.customerId ? String(form.customerId) : ""}
-              onChange={(e) => {
-                setForm((f) => ({ ...f, customerId: e.target.value ? Number(e.target.value) : null }));
-                if (errors.customerId) setOne("customerId", undefined);
+              inputValue={customerQuery}
+              onInputValueChange={(value) => {
+                setCustomerQuery(value);
+                setForm((f) => ({ ...f, customerId: null }));
               }}
-              aria-invalid={!!errors.customerId}
-              className={errors.customerId ? "border-destructive focus-visible:ring-destructive" : undefined}
-            >
-              <option value="">— Select —</option>
-              {customers?.rows.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.code} — {c.name}
-                </option>
-              ))}
-            </Select>
+              onSelect={selectCustomer}
+              options={(customers?.rows ?? []).map((c) => ({
+                value: String(c.id),
+                label: `${c.code} - ${c.name}`,
+                secondary: c.code,
+              }))}
+              placeholder="Type customer name/code, arrow keys, Enter"
+            />
           </Field>
           <Field label="Date" required error={errors.quotationDate}>
             <Input
@@ -525,30 +572,19 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
               className={errors.validityDays ? "border-destructive focus-visible:ring-destructive" : undefined}
             />
           </Field>
-          <Field label="Status">
+          <Field label="Subject template" error={errors.subjectTemplateId}>
             <Select
-              value={form.status}
-              onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as QuotationBuilderInitial["status"] }))}
+              value={form.subjectTemplateId ? String(form.subjectTemplateId) : ""}
+              onChange={(e) => onSelectTemplate(e.target.value)}
             >
-              <option value="draft">Draft</option>
-              <option value="sent">Sent</option>
-              <option value="won">Won</option>
-              <option value="lost">Lost</option>
-              <option value="expired">Expired</option>
-              <option value="cancelled">Cancelled</option>
+              <option value="">— Select template —</option>
+              {subjectTemplates?.rows.filter((t) => t.isActive).map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}{t.isDefault ? " (Default)" : ""}
+                </option>
+              ))}
             </Select>
-          </Field>
-          <Field label="Currency" required error={errors.currency}>
-            <Input
-              value={form.currency}
-              onChange={(e) => {
-                setForm((f) => ({ ...f, currency: e.target.value.toUpperCase().slice(0, 3) }));
-                if (errors.currency) setOne("currency", undefined);
-              }}
-              maxLength={3}
-              aria-invalid={!!errors.currency}
-              className={errors.currency ? "border-destructive focus-visible:ring-destructive" : undefined}
-            />
+            <p className="text-xs text-muted-foreground">Default template is auto-applied, you can change it here.</p>
           </Field>
           <Field label="Subject" className="lg:col-span-2" error={errors.subject}>
             <Input
@@ -609,52 +645,37 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
                   hasErr ? "border-destructive/60" : "",
                 )}
               >
-                <div className="lg:col-span-3">
+                <div className="lg:col-span-4">
                   <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Product</Label>
-                  <Select
+                  <Typeahead
                     value={it.productId}
-                    onChange={(e) => updateItem(idx, "productId", e.target.value)}
-                  >
-                    <option value="">— Free text —</option>
-                    {products?.rows.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.sku} — {p.name}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div className="lg:col-span-3">
-                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                    Name<RequiredStar />
-                  </Label>
-                  <Input
-                    value={it.productName}
-                    onChange={(e) => updateItem(idx, "productName", e.target.value)}
-                    aria-invalid={!!ie.productName}
-                    className={ie.productName ? "border-destructive focus-visible:ring-destructive" : undefined}
+                    inputValue={it.productQuery}
+                    onInputValueChange={(value) => updateItem(idx, "productQuery", value)}
+                    onSelect={(option) => selectProduct(idx, option)}
+                    options={(products?.rows ?? []).map((p) => ({
+                      value: String(p.id),
+                      label: `${p.sku ?? "NO-SKU"} - ${p.name}`,
+                      secondary: p.unitCode || p.unitName || "",
+                    }))}
+                    placeholder="Type product, arrow keys, Enter"
                   />
-                  {ie.productName ? <p className="mt-0.5 text-[11px] font-medium text-destructive">{ie.productName}</p> : null}
+                </div>
+                <div className="lg:col-span-2">
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Unit</Label>
+                  <Input value={it.unitName} readOnly placeholder="Unit" />
                 </div>
                 <div className="lg:col-span-1">
                   <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Qty</Label>
                   <Input
                     type="number"
-                    min="0"
-                    step="0.01"
+                    min="1"
+                    step="1"
                     value={it.qty}
                     onChange={(e) => updateItem(idx, "qty", e.target.value)}
                     aria-invalid={!!ie.qty}
                     className={ie.qty ? "border-destructive focus-visible:ring-destructive" : undefined}
                   />
                   {ie.qty ? <p className="mt-0.5 text-[11px] font-medium text-destructive">{ie.qty}</p> : null}
-                </div>
-                <div className="lg:col-span-3">
-                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Qty breakup</Label>
-                  <Input
-                    value={it.qtyBreakup}
-                    onChange={(e) => updateItem(idx, "qtyBreakup", e.target.value)}
-                    placeholder='Govindpur:10; Hazaribagh:5'
-                  />
                 </div>
                 <div className="lg:col-span-2">
                   <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Unit price</Label>
@@ -669,38 +690,33 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
                   />
                   {ie.unitPrice ? <p className="mt-0.5 text-[11px] font-medium text-destructive">{ie.unitPrice}</p> : null}
                 </div>
-                <div className="lg:col-span-1">
-                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">Disc %</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    value={it.discountPercent}
-                    onChange={(e) => updateItem(idx, "discountPercent", e.target.value)}
-                    aria-invalid={!!ie.discountPercent}
-                    className={ie.discountPercent ? "border-destructive focus-visible:ring-destructive" : undefined}
-                  />
-                  {ie.discountPercent ? <p className="mt-0.5 text-[11px] font-medium text-destructive">{ie.discountPercent}</p> : null}
-                </div>
-                <div className="lg:col-span-1">
-                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">GST %</Label>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    value={it.gstRate}
-                    onChange={(e) => updateItem(idx, "gstRate", e.target.value)}
-                    aria-invalid={!!ie.gstRate}
-                    className={ie.gstRate ? "border-destructive focus-visible:ring-destructive" : undefined}
-                  />
-                  {ie.gstRate ? <p className="mt-0.5 text-[11px] font-medium text-destructive">{ie.gstRate}</p> : null}
+                <div className="lg:col-span-2">
+                  <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">GST slab</Label>
+                  <Select
+                    value={it.gstSlabId}
+                    onChange={(e) => {
+                      const slabId = e.target.value;
+                      const slab = masters?.gstSlabs.find((g) => String(g.id) === slabId);
+                      setForm((f) => {
+                        const items = [...f.items];
+                        const nextRate = slab ? String(parseFloat(String(slab.rate))) : "0";
+                        items[idx] = { ...items[idx], gstSlabId: slabId, gstRate: nextRate };
+                        return { ...f, items };
+                      });
+                    }}
+                  >
+                    <option value="">— Select GST slab —</option>
+                    {(masters?.gstSlabs ?? []).filter((g) => g.isActive).map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name} ({g.rate}%)
+                      </option>
+                    ))}
+                  </Select>
                 </div>
                 <div className="lg:col-span-1 flex items-end justify-between gap-2">
                   <div className="text-right text-sm tabular-nums">
                     <div className="text-[10px] uppercase text-muted-foreground">Total</div>
-                    <div>{formatCurrency(line?.lineTotal ?? 0, form.currency)}</div>
+                    <div>{formatCurrency(line?.lineTotal ?? 0, "INR")}</div>
                   </div>
                   <Button
                     type="button"
@@ -718,59 +734,20 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
         </CardContent>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Discount &amp; freight</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <Field label="Discount type">
-              <Select
-                value={form.discountType}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, discountType: e.target.value as "percent" | "amount" }))
-                }
-              >
-                <option value="percent">Percent</option>
-                <option value="amount">Amount</option>
-              </Select>
-            </Field>
-            <Field label="Discount value">
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.discountValue}
-                onChange={(e) => setForm((f) => ({ ...f, discountValue: Number(e.target.value) || 0 }))}
-              />
-            </Field>
-            <Field label="Freight" className="sm:col-span-2">
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.freightAmount}
-                onChange={(e) => setForm((f) => ({ ...f, freightAmount: Number(e.target.value) || 0 }))}
-              />
-            </Field>
-          </CardContent>
-        </Card>
-
+      <div className="grid gap-6 lg:grid-cols-1">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Totals</CardTitle>
           </CardHeader>
           <CardContent>
             <dl className="space-y-2 text-sm">
-              <Row label="Subtotal" value={formatCurrency(calc.subtotal, form.currency)} />
-              <Row label="Discount" value={`− ${formatCurrency(calc.discountAmount, form.currency)}`} />
-              <Row label="Taxable" value={formatCurrency(calc.taxableAmount, form.currency)} />
-              <Row label="GST" value={formatCurrency(calc.gstAmount, form.currency)} />
-              <Row label="Freight" value={formatCurrency(calc.freightAmount, form.currency)} />
+              <Row label="Subtotal" value={formatCurrency(calc.subtotal, "INR")} />
+              <Row label="Taxable" value={formatCurrency(calc.taxableAmount, "INR")} />
+              <Row label="GST" value={formatCurrency(calc.gstAmount, "INR")} />
               <div className="my-2 h-px bg-border" />
               <Row
                 label="Grand total"
-                value={formatCurrency(calc.grandTotal, form.currency)}
+                value={formatCurrency(calc.grandTotal, "INR")}
                 strong
               />
             </dl>
@@ -888,6 +865,7 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
                   setForm((f) => ({ ...f, signatureMode: e.target.value as SignatureMode }))
                 }
               >
+                <option value="blank">Mode 0 - Blank</option>
                 <option value="upload">Mode A - Uploaded image</option>
                 <option value="draw">Mode B - Draw signature</option>
                 <option value="typed">Mode C - Typed signature</option>
@@ -1129,6 +1107,7 @@ export function QuotationBuilderForId({ id }: { id: number }) {
     customerId: number;
     contactPersonId: number | null;
     inquiryId: number | null;
+    subjectTemplateId: number | null;
     status: string;
     currency: string;
     discountType: string;
@@ -1148,10 +1127,9 @@ export function QuotationBuilderForId({ id }: { id: number }) {
       productId: number | null;
       productName: string;
       unitName: string | null;
-      qtyBreakup: string | null;
       qty: string;
       unitPrice: string;
-      discountPercent: string;
+      gstSlabId: number | null;
       gstRate: string;
     }[];
   }>(`/api/quotations/${id}`);
@@ -1174,6 +1152,7 @@ export function QuotationBuilderForId({ id }: { id: number }) {
     customerId: data.customerId,
     contactPersonId: data.contactPersonId ?? null,
     inquiryId: data.inquiryId ?? null,
+    subjectTemplateId: data.subjectTemplateId ?? null,
     status: (data.status as QuotationBuilderInitial["status"]) ?? "draft",
     currency: data.currency ?? "INR",
     discountType: (data.discountType as "percent" | "amount") ?? "percent",
@@ -1191,12 +1170,12 @@ export function QuotationBuilderForId({ id }: { id: number }) {
     signatureEmail: data.signatureEmail ?? "",
     items: (data.items.length > 0 ? data.items : []).map((it) => ({
       productId: it.productId ? String(it.productId) : "",
+      productQuery: it.productName,
       productName: it.productName,
       unitName: it.unitName ?? "",
-      qtyBreakup: it.qtyBreakup ?? "",
       qty: it.qty ?? "1",
       unitPrice: it.unitPrice ?? "0",
-      discountPercent: it.discountPercent ?? "0",
+      gstSlabId: it.gstSlabId ? String(it.gstSlabId) : "",
       gstRate: it.gstRate ?? "18",
     })),
   };

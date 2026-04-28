@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, Download, Loader2, Mail, MessageCircle, Pencil, Printer } from "lucide-react";
+import { ArrowLeft, Download, Eye, Loader2, Mail, MessageCircle, Pencil, Printer } from "lucide-react";
+import { PdfPreviewDialog } from "@/components/pdf-preview-dialog";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,7 +43,7 @@ type QuotationDetail = {
   paymentTerms: string | null;
   deliverySchedule: string | null;
   notes: string | null;
-  signatureMode: "upload" | "draw" | "typed" | null;
+  signatureMode: "upload" | "draw" | "typed" | "blank" | null;
   signatureData: string | null;
   signatureName: string | null;
   signatureDesignation: string | null;
@@ -90,6 +91,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const { data, loading, error, refresh } = useResource<QuotationDetail>(`/api/quotations/${id}`);
   const { data: dispatchLogs, refresh: refreshLogs } = useResource<DispatchLog[]>(`/api/quotations/${id}/dispatch`);
   const [sending, setSending] = React.useState<"email" | "whatsapp" | null>(null);
+  const [pdfPreviewOpen, setPdfPreviewOpen] = React.useState(false);
 
   async function sendEmail() {
     if (!data) return;
@@ -156,6 +158,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   }
 
   return (
+    <>
     <div className="space-y-6 animate-in fade-in-50">
       <PageHeader
         title={data.referenceNo || data.quotationNo}
@@ -172,8 +175,11 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
                 <Printer className="h-4 w-4" /> Print
               </Link>
             </Button>
+            <Button variant="outline" onClick={() => setPdfPreviewOpen(true)}>
+              <Eye className="h-4 w-4" /> Preview PDF
+            </Button>
             <Button asChild variant="outline">
-              <Link href={`/api/quotations/${id}/pdf`} target="_blank">
+              <Link href={`/api/quotations/${id}/pdf`} download>
                 <Download className="h-4 w-4" /> Download PDF
               </Link>
             </Button>
@@ -243,7 +249,6 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
                 <TableHead>Description</TableHead>
                 <TableHead className="text-right">Qty</TableHead>
                 <TableHead className="text-right">Unit price</TableHead>
-                <TableHead className="text-right">Disc %</TableHead>
                 <TableHead className="text-right">GST %</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
               </TableRow>
@@ -260,7 +265,6 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{Number(it.qty).toLocaleString("en-IN")}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatCurrency(it.unitPrice, data.currency)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{Number(it.discountPercent).toFixed(2)}</TableCell>
                   <TableCell className="text-right tabular-nums">{Number(it.gstRate).toFixed(2)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatCurrency(it.lineTotal, data.currency)}</TableCell>
                 </TableRow>
@@ -280,12 +284,14 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
             <Section title="Delivery schedule" body={data.deliverySchedule} />
             <Section title="Terms & conditions" body={data.termsConditions} />
             <Section title="Notes" body={data.notes} />
-            <Section title="Signatory" body={[
-              data.signatureName,
-              data.signatureDesignation,
-              data.signatureMobile,
-              data.signatureEmail,
-            ].filter(Boolean).join("\n") || null} />
+            {data.signatureMode !== "blank" ? (
+              <Section title="Signatory" body={[
+                data.signatureName,
+                data.signatureDesignation,
+                data.signatureMobile,
+                data.signatureEmail,
+              ].filter(Boolean).join("\n") || null} />
+            ) : null}
             {data.signatureMode && data.signatureMode !== "typed" && data.signatureData ? (
               <img src={data.signatureData} alt="Signature" className="max-h-16 object-contain" />
             ) : null}
@@ -301,10 +307,8 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
           <CardContent>
             <dl className="space-y-2 text-sm">
               <Row label="Subtotal" value={formatCurrency(data.subtotal, data.currency)} />
-              <Row label="Discount" value={`− ${formatCurrency(data.discountAmount, data.currency)}`} />
               <Row label="Taxable" value={formatCurrency(data.taxableAmount, data.currency)} />
               <Row label="GST" value={formatCurrency(data.gstAmount, data.currency)} />
-              <Row label="Freight" value={formatCurrency(data.freightAmount, data.currency)} />
               <div className="my-2 h-px bg-border" />
               <Row label="Grand total" value={formatCurrency(data.grandTotal, data.currency)} strong />
             </dl>
@@ -346,6 +350,14 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
         </CardContent>
       </Card>
     </div>
+
+    <PdfPreviewDialog
+      open={pdfPreviewOpen}
+      onClose={() => setPdfPreviewOpen(false)}
+      label={data.referenceNo || data.quotationNo}
+      pdfRoute={`/api/quotations/${id}/pdf`}
+    />
+    </>
   );
 }
 

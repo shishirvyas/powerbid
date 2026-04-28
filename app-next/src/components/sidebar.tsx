@@ -27,6 +27,8 @@ const items = [
   { href: "/inquiries", label: "Inquiries", icon: Inbox },
   { href: "/customers", label: "Customers", icon: Users },
   { href: "/products", label: "Products", icon: Package },
+  { href: "/units", label: "Units", icon: Package },
+    { href: "/subject-templates", label: "Subject Templates", icon: FileText },
   { href: "/showcase", label: "Showcase", icon: MonitorPlay },
   { href: "/reports", label: "Reports", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },

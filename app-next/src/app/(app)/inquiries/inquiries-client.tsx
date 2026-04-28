@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
-import { InquiryStatusBadge, PriorityBadge } from "@/components/status-badges";
+import { InquiryStatusBadge } from "@/components/status-badges";
+import { Typeahead, type TypeaheadOption } from "@/components/typeahead";
 import {
   Table,
   TableBody,
@@ -44,19 +45,21 @@ import { cn } from "@/lib/utils";
 type InquiryRow = {
   id: number;
   inquiryNo: string;
-  inquiryDate: string;
+  dateOfInquiry: string | null;
+  referenceNumber: string | null;
+  createdAt: string;
   customerId: number | null;
   customerName: string | null;
   source: string;
-  priority: string;
   status: string;
   requirement: string | null;
 };
 
 type InquiryItem = {
   id?: number;
-  productId: number | null;
+  productId: number;
   productName: string;
+  unitName: string | null;
   qty: string;
   remarks: string | null;
 };
@@ -67,26 +70,30 @@ type InquiryFull = InquiryRow & {
 };
 
 type CustomerOption = { id: number; code: string; name: string };
-type ProductOption = { id: number; sku: string; name: string };
+type ProductOption = { id: number; sku: string | null; name: string; unitCode: string | null; unitName: string | null };
 
 type FormState = {
   customerId: string;
   customerName: string;
+  customerQuery: string;
   source: "walkin" | "phone" | "email" | "web" | "other";
-  priority: "low" | "medium" | "high" | "urgent";
   status: "new" | "in_progress" | "quoted" | "won" | "lost" | "closed";
+  dateOfInquiry: string;
+  referenceNumber: string;
   requirement: string;
   expectedClosure: string;
-  items: { productId: string; productName: string; qty: string; remarks: string }[];
+  items: { productId: string; productName: string; productQuery: string; unitName: string; qty: string; remarks: string }[];
 };
 
-const emptyItem = { productId: "", productName: "", qty: "1", remarks: "" };
+const emptyItem = { productId: "", productName: "", productQuery: "", unitName: "", qty: "1", remarks: "" };
 const emptyForm: FormState = {
   customerId: "",
   customerName: "",
+  customerQuery: "",
   source: "walkin",
-  priority: "medium",
   status: "new",
+  dateOfInquiry: new Date().toISOString().slice(0, 10),
+  referenceNumber: "",
   requirement: "",
   expectedClosure: "",
   items: [{ ...emptyItem }],
@@ -94,10 +101,10 @@ const emptyForm: FormState = {
 
 const labelMap: Record<string, string> = {
   customerId: "Customer",
-  customerName: "Customer name",
   source: "Source",
-  priority: "Priority",
   status: "Status",
+  dateOfInquiry: "Date of inquiry",
+  referenceNumber: "Reference number",
   requirement: "Requirement",
   expectedClosure: "Expected closure",
   items: "Line items",
@@ -177,9 +184,9 @@ export function InquiriesClient() {
               <TableRow>
                 <TableHead>Inquiry</TableHead>
                 <TableHead className="hidden md:table-cell">Date</TableHead>
+                <TableHead className="hidden md:table-cell">Reference</TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead className="hidden lg:table-cell">Source</TableHead>
-                <TableHead>Priority</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -191,10 +198,10 @@ export function InquiriesClient() {
                 data?.rows.map((r) => (
                   <TableRow key={r.id} className="transition-colors hover:bg-muted/40">
                     <TableCell className="font-mono text-xs">{r.inquiryNo}</TableCell>
-                    <TableCell className="hidden md:table-cell text-sm">{formatDate(r.inquiryDate)}</TableCell>
+                    <TableCell className="hidden md:table-cell text-sm">{formatDate(r.dateOfInquiry || r.createdAt)}</TableCell>
+                    <TableCell className="hidden md:table-cell text-sm">{r.referenceNumber || "-"}</TableCell>
                     <TableCell className="font-medium">{r.customerName || "—"}</TableCell>
                     <TableCell className="hidden lg:table-cell text-sm capitalize">{r.source}</TableCell>
-                    <TableCell><PriorityBadge priority={r.priority} /></TableCell>
                     <TableCell><InquiryStatusBadge status={r.status} /></TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
@@ -322,16 +329,20 @@ function InquiryFormDialog({
       setForm({
         customerId: full.customerId ? String(full.customerId) : "",
         customerName: full.customerName ?? "",
+        customerQuery: full.customerName ?? "",
         source: (full.source as FormState["source"]) ?? "walkin",
-        priority: (full.priority as FormState["priority"]) ?? "medium",
         status: (full.status as FormState["status"]) ?? "new",
+        dateOfInquiry: full.dateOfInquiry ?? new Date().toISOString().slice(0, 10),
+        referenceNumber: full.referenceNumber ?? "",
         requirement: full.requirement ?? "",
         expectedClosure: full.expectedClosure ?? "",
         items:
           full.items.length > 0
             ? full.items.map((it) => ({
-                productId: it.productId ? String(it.productId) : "",
+                productId: String(it.productId),
                 productName: it.productName,
+                productQuery: it.productName,
+                unitName: it.unitName ?? "",
                 qty: it.qty ?? "1",
                 remarks: it.remarks ?? "",
               }))
@@ -351,10 +362,35 @@ function InquiryFormDialog({
     setForm((f) => {
       const items = [...f.items];
       items[idx] = { ...items[idx], [key]: value };
-      if (key === "productId" && value) {
-        const p = products.find((x) => String(x.id) === value);
-        if (p) items[idx].productName = p.name;
-      }
+      return { ...f, items };
+    });
+    if (itemErrors[idx]) setItemErrors((e) => ({ ...e, [idx]: "" }));
+  }
+
+  function selectCustomer(option: TypeaheadOption) {
+    const picked = customers.find((c) => String(c.id) === option.value);
+    if (!picked) return;
+    setForm((f) => ({
+      ...f,
+      customerId: String(picked.id),
+      customerName: picked.name,
+      customerQuery: `${picked.code} - ${picked.name}`,
+    }));
+    if (errors.customerId) setOne("customerId", undefined);
+  }
+
+  function selectProduct(idx: number, option: TypeaheadOption) {
+    const picked = products.find((p) => String(p.id) === option.value);
+    if (!picked) return;
+    setForm((f) => {
+      const items = [...f.items];
+      items[idx] = {
+        ...items[idx],
+        productId: String(picked.id),
+        productName: picked.name,
+        productQuery: `${picked.sku ?? "NO-SKU"} - ${picked.name}`,
+        unitName: picked.unitCode || picked.unitName || "",
+      };
       return { ...f, items };
     });
     if (itemErrors[idx]) setItemErrors((e) => ({ ...e, [idx]: "" }));
@@ -369,16 +405,16 @@ function InquiryFormDialog({
 
   function clientValidate(): { fieldErrors: Record<string, string>; itemErrs: Record<number, string> } {
     const fieldErrors: Record<string, string> = {};
-    if (!form.customerId && !form.customerName.trim()) {
-      fieldErrors.customerName = "Pick a customer or enter a name";
-    }
+    if (!form.customerId) fieldErrors.customerId = "Select a customer from master";
+    if (!form.dateOfInquiry) fieldErrors.dateOfInquiry = "Date of inquiry is required";
     const itemErrs: Record<number, string> = {};
     form.items.forEach((it, idx) => {
-      if (!it.productName.trim() && (it.productId || it.qty || it.remarks)) {
-        itemErrs[idx] = "Product name is required for non-empty rows";
-      }
-      if (it.qty && (Number.isNaN(Number(it.qty)) || Number(it.qty) < 0)) {
-        itemErrs[idx] = "Enter a valid quantity";
+      if (!it.productId) itemErrs[idx] = "Select a product from master";
+      if (
+        it.qty &&
+        (Number.isNaN(Number(it.qty)) || Number(it.qty) <= 0 || !Number.isInteger(Number(it.qty)))
+      ) {
+        itemErrs[idx] = "Enter a whole number quantity";
       }
     });
     return { fieldErrors, itemErrs };
@@ -397,19 +433,21 @@ function InquiryFormDialog({
       toast.error(allMsgs[0] ?? "Please fix errors");
       return;
     }
-    const items = form.items.filter((it) => it.productName.trim());
+    const items = form.items.filter((it) => it.productId);
     setSaving(true);
     const payload = {
-      customerId: form.customerId ? Number(form.customerId) : null,
+      customerId: Number(form.customerId),
       customerName: form.customerName || null,
       source: form.source,
-      priority: form.priority,
       status: form.status,
+      dateOfInquiry: form.dateOfInquiry,
+      referenceNumber: form.referenceNumber || null,
       requirement: form.requirement || null,
       expectedClosure: form.expectedClosure || null,
       items: items.map((it) => ({
-        productId: it.productId ? Number(it.productId) : null,
+        productId: Number(it.productId),
         productName: it.productName,
+        unitName: it.unitName || null,
         qty: it.qty || "1",
         remarks: it.remarks || null,
       })),
@@ -450,33 +488,25 @@ function InquiryFormDialog({
         <DialogHeader>
           <DialogTitle>{editingId ? "Edit inquiry" : "New inquiry"}</DialogTitle>
           <DialogDescription>
-            Pick a customer or enter a name. Fields marked <span className="text-destructive">*</span> are required.
+            Select customer and products from master data. Fields marked <span className="text-destructive">*</span> are required.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Customer" error={errors.customerId}>
-              <Select
+            <FormField label="Customer" required error={errors.customerId}>
+              <Typeahead
                 value={form.customerId}
-                onChange={(e) => updateField("customerId", e.target.value)}
-              >
-                <option value="">— Free text below —</option>
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.code} — {c.name}
-                  </option>
-                ))}
-              </Select>
-            </FormField>
-            <FormField
-              label="Customer name (if not in list)"
-              required={!form.customerId}
-              error={errors.customerName}
-            >
-              <Input
-                value={form.customerName}
-                onChange={(e) => updateField("customerName", e.target.value)}
-                placeholder="Walk-in / new prospect"
+                inputValue={form.customerQuery}
+                onInputValueChange={(value) =>
+                  setForm((f) => ({ ...f, customerQuery: value, customerId: "", customerName: "" }))
+                }
+                onSelect={selectCustomer}
+                options={customers.map((c) => ({
+                  value: String(c.id),
+                  label: `${c.code} - ${c.name}`,
+                  secondary: c.code,
+                }))}
+                placeholder="Type customer name/code, then use arrow keys + Enter"
               />
             </FormField>
             <FormField label="Source">
@@ -491,16 +521,12 @@ function InquiryFormDialog({
                 <option value="other">Other</option>
               </Select>
             </FormField>
-            <FormField label="Priority">
-              <Select
-                value={form.priority}
-                onChange={(e) => updateField("priority", e.target.value as FormState["priority"])}
-              >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
-              </Select>
+            <FormField label="Date of inquiry" required error={errors.dateOfInquiry}>
+              <Input
+                type="date"
+                value={form.dateOfInquiry}
+                onChange={(e) => updateField("dateOfInquiry", e.target.value)}
+              />
             </FormField>
             <FormField label="Status">
               <Select
@@ -514,6 +540,13 @@ function InquiryFormDialog({
                 <option value="lost">Lost</option>
                 <option value="closed">Closed</option>
               </Select>
+            </FormField>
+            <FormField label="Reference number" error={errors.referenceNumber}>
+              <Input
+                value={form.referenceNumber}
+                onChange={(e) => updateField("referenceNumber", e.target.value)}
+                placeholder="Customer reference no"
+              />
             </FormField>
             <FormField label="Expected closure" error={errors.expectedClosure}>
               <Input
@@ -548,33 +581,28 @@ function InquiryFormDialog({
                   )}
                 >
                   <div className="grid gap-2 sm:grid-cols-12">
-                    <div className="sm:col-span-4">
-                      <Select
+                    <div className="sm:col-span-5">
+                      <Typeahead
                         value={it.productId}
-                        onChange={(e) => updateItem(idx, "productId", e.target.value)}
-                      >
-                        <option value="">— Free text —</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.sku} — {p.name}
-                          </option>
-                        ))}
-                      </Select>
-                    </div>
-                    <div className="sm:col-span-4">
-                      <Input
-                        placeholder="Product name *"
-                        value={it.productName}
-                        onChange={(e) => updateItem(idx, "productName", e.target.value)}
-                        aria-invalid={!!itemErrors[idx]}
-                        className={itemErrors[idx] ? "border-destructive focus-visible:ring-destructive" : undefined}
+                        inputValue={it.productQuery}
+                        onInputValueChange={(value) => updateItem(idx, "productQuery", value)}
+                        onSelect={(option) => selectProduct(idx, option)}
+                        options={products.map((p) => ({
+                          value: String(p.id),
+                          label: `${p.sku ?? "NO-SKU"} - ${p.name}`,
+                          secondary: p.unitCode || p.unitName || "",
+                        }))}
+                        placeholder="Type product, arrow keys, Enter"
                       />
                     </div>
-                    <div className="sm:col-span-1">
+                    <div className="sm:col-span-2">
+                      <Input value={it.unitName} readOnly placeholder="Unit" />
+                    </div>
+                    <div className="sm:col-span-2">
                       <Input
                         type="number"
-                        min="0"
-                        step="0.01"
+                        min="1"
+                        step="1"
                         value={it.qty}
                         onChange={(e) => updateItem(idx, "qty", e.target.value)}
                         placeholder="Qty"
@@ -648,7 +676,7 @@ function InquiryViewDialog({
         <DialogHeader>
           <DialogTitle>{data?.inquiryNo ?? "Inquiry details"}</DialogTitle>
           <DialogDescription>
-            {data ? `Captured ${formatDate(data.inquiryDate)}` : "Loading inquiry…"}
+            {data ? `Captured ${formatDate(data.dateOfInquiry || data.createdAt)}` : "Loading inquiry…"}
           </DialogDescription>
         </DialogHeader>
 
@@ -676,9 +704,8 @@ function InquiryViewDialog({
                 <div className="capitalize">{data.source}</div>
               </div>
               <div>
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">Priority / Status</div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Status</div>
                 <div className="flex items-center gap-2">
-                  <PriorityBadge priority={data.priority} />
                   <InquiryStatusBadge status={data.status} />
                 </div>
               </div>
@@ -703,6 +730,7 @@ function InquiryViewDialog({
                     <TableHeader>
                       <TableRow>
                         <TableHead>Product</TableHead>
+                        <TableHead>Unit</TableHead>
                         <TableHead className="w-24 text-right">Qty</TableHead>
                         <TableHead className="hidden sm:table-cell">Remarks</TableHead>
                       </TableRow>
@@ -711,6 +739,7 @@ function InquiryViewDialog({
                       {data.items.map((it, idx) => (
                         <TableRow key={it.id ?? idx}>
                           <TableCell className="font-medium">{it.productName}</TableCell>
+                          <TableCell>{it.unitName || "-"}</TableCell>
                           <TableCell className="text-right tabular-nums">{it.qty}</TableCell>
                           <TableCell className="hidden sm:table-cell text-muted-foreground">{it.remarks || "—"}</TableCell>
                         </TableRow>

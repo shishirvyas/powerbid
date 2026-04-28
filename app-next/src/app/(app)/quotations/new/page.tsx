@@ -16,6 +16,7 @@ type InquiryDetail = {
     id: number;
     productId: number | null;
     productName: string;
+    unitName: string | null;
     qty: string;
     remarks: string | null;
   }[];
@@ -23,11 +24,12 @@ type InquiryDetail = {
 
 type ProductOption = {
   id: number;
-  sku: string;
+  sku: string | null;
   name: string;
-  basePrice: string;
+  unitId: number | null;
+  unitCode: string | null;
   unitName: string | null;
-  gstRate: string | null;
+  hsmCode: string | null;
 };
 
 type ProductsResp = { rows: ProductOption[]; total: number };
@@ -69,13 +71,13 @@ export default function Page() {
         const prod = it.productId ? productMap.get(it.productId) : undefined;
         return {
           productId: it.productId ? String(it.productId) : "",
+          productQuery: it.productName,
           productName: it.productName,
-          unitName: prod?.unitName ?? "",
-          qtyBreakup: "",
+          unitName: prod?.unitCode ?? prod?.unitName ?? "",
           qty: it.qty || "1",
-          unitPrice: prod?.basePrice ?? "0",
-          discountPercent: "0",
-          gstRate: prod?.gstRate ?? "18",
+          unitPrice: "0",
+          gstSlabId: "",
+          gstRate: "0",
         };
       })
     : blankInitial.items;

@@ -47,35 +47,37 @@ export type CustomerInput = z.infer<typeof customerSchema>;
 
 /* ------------------------------ products ------------------------------- */
 export const productSchema = z.object({
-  sku: requiredString("SKU", 80),
+  sku: optionalString,
   name: requiredString("Name"),
   description: optionalString,
-  brandId: z.coerce.number().int().positive().nullable().optional(),
   unitId: z.coerce.number().int().positive().nullable().optional(),
-  gstSlabId: z.coerce.number().int().positive().nullable().optional(),
-  basePrice: numericString.default("0"),
-  isActive: z.boolean().default(true),
+  hsmCode: optionalString,
 });
 export type ProductInput = z.infer<typeof productSchema>;
 
 /* ------------------------------ inquiries ------------------------------ */
 export const inquirySchema = z.object({
-  customerId: z.coerce.number().int().positive().nullable().optional(),
+  customerId: z.coerce.number().int().positive(),
   customerName: optionalString,
   source: z.enum(["walkin", "phone", "email", "web", "other"]).default("walkin"),
-  priority: z.enum(["low", "medium", "high", "urgent"]).default("medium"),
   status: z
     .enum(["new", "in_progress", "quoted", "won", "lost", "closed"])
     .default("new"),
+  dateOfInquiry: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD")
+    .default(() => new Date().toISOString().slice(0, 10)),
+  referenceNumber: optionalString,
   requirement: longText,
   expectedClosure: optionalString,
   assignedTo: z.coerce.number().int().positive().nullable().optional(),
   items: z
     .array(
       z.object({
-        productId: z.coerce.number().int().positive().nullable().optional(),
+        productId: z.coerce.number().int().positive(),
         productName: requiredString("Product"),
-        qty: numericString.default("1"),
+        unitName: optionalString,
+        qty: z.coerce.number().int().positive().default(1).transform((v) => String(v)),
         remarks: optionalString,
       }),
     )
@@ -85,19 +87,13 @@ export type InquiryInput = z.infer<typeof inquirySchema>;
 
 /* ------------------------------ quotations ----------------------------- */
 export const quotationItemSchema = z.object({
-  productId: z.coerce.number().int().positive().nullable().optional(),
+  productId: z.coerce.number().int().positive(),
   productName: requiredString("Product"),
   unitName: optionalString,
-  qtyBreakup: z
-    .string()
-    .trim()
-    .max(2000)
-    .nullish()
-    .transform((v) => (v ? v : null)),
-  qty: z.coerce.number().nonnegative().default(1),
+  qty: z.coerce.number().int().positive().default(1),
   unitPrice: z.coerce.number().nonnegative().default(0),
-  discountPercent: z.coerce.number().min(0).max(100).default(0),
   gstRate: z.coerce.number().min(0).max(100).default(18),
+  gstSlabId: z.coerce.number().int().positive().nullable().optional(),
 });
 
 export const quotationSchema = z.object({
@@ -114,6 +110,7 @@ export const quotationSchema = z.object({
   customerId: z.coerce.number().int().positive(),
   contactPersonId: z.coerce.number().int().positive().nullable().optional(),
   inquiryId: z.coerce.number().int().positive().nullable().optional(),
+  subjectTemplateId: z.coerce.number().int().positive().nullable().optional(),
   status: z
     .enum(["draft", "sent", "won", "lost", "expired", "cancelled"])
     .default("draft"),
@@ -125,7 +122,7 @@ export const quotationSchema = z.object({
   paymentTerms: longText,
   deliverySchedule: longText,
   notes: longText,
-  signatureMode: z.enum(["upload", "draw", "typed"]).nullable().optional(),
+  signatureMode: z.enum(["upload", "draw", "typed", "blank"]).nullable().optional(),
   signatureData: z.string().trim().max(1000000).nullable().optional(),
   signatureName: optionalString,
   signatureDesignation: optionalString,
