@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { Download, Printer, X } from "lucide-react";
+import { Download, ExternalLink, Printer, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogOverlay } from "@/components/ui/dialog";
 
@@ -15,9 +15,18 @@ interface PdfPreviewDialogProps {
   pdfRoute: string;
 }
 
+function useIsMobile() {
+  const [mobile, setMobile] = React.useState(false);
+  React.useEffect(() => {
+    setMobile(/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+  }, []);
+  return mobile;
+}
+
 export function PdfPreviewDialog({ open, onClose, label, pdfRoute }: PdfPreviewDialogProps) {
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
   const inlineUrl = `${pdfRoute}?inline=1`;
+  const isMobile = useIsMobile();
 
   function handlePrint() {
     try {
@@ -39,9 +48,18 @@ export function PdfPreviewDialog({ open, onClose, label, pdfRoute }: PdfPreviewD
           <div className="flex items-center gap-2 px-4 py-2 bg-muted border-b shrink-0">
             <span className="text-sm font-semibold mr-auto truncate">{label}</span>
 
-            <Button size="sm" variant="outline" onClick={handlePrint}>
-              <Printer className="h-4 w-4 mr-1" />
-              Print
+            {!isMobile && (
+              <Button size="sm" variant="outline" onClick={handlePrint}>
+                <Printer className="h-4 w-4 mr-1" />
+                Print
+              </Button>
+            )}
+
+            <Button size="sm" variant="outline" asChild>
+              <a href={inlineUrl} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="h-4 w-4 mr-1" />
+                Open
+              </a>
             </Button>
 
             <Button size="sm" variant="outline" asChild>
@@ -56,13 +74,25 @@ export function PdfPreviewDialog({ open, onClose, label, pdfRoute }: PdfPreviewD
             </Button>
           </div>
 
-          {/* PDF Viewer */}
-          <iframe
-            ref={iframeRef}
-            src={inlineUrl}
-            title={`PDF Preview — ${label}`}
-            className="flex-1 w-full border-0 bg-white"
-          />
+          {/* PDF Viewer — iframe works on desktop; mobile browsers open PDF natively via the Open button */}
+          {isMobile ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center text-muted-foreground">
+              <p className="text-sm">Mobile browsers cannot display PDFs inline.</p>
+              <Button asChild>
+                <a href={inlineUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Open PDF
+                </a>
+              </Button>
+            </div>
+          ) : (
+            <iframe
+              ref={iframeRef}
+              src={inlineUrl}
+              title={`PDF Preview — ${label}`}
+              className="flex-1 w-full border-0 bg-white"
+            />
+          )}
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </Dialog>

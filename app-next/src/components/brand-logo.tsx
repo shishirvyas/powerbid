@@ -11,7 +11,7 @@ export function BrandLogo({ className, invert = false }: BrandLogoProps) {
     <div className={cn("flex items-center", className)}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/brand/lan-logo.svg"
+        src="/brand/lan-logo.png"
         alt="LAN Engineering & Technologies"
         style={{ height: 36, width: "auto", filter: invert ? "brightness(0) invert(1)" : undefined }}
       />

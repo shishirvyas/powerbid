@@ -37,7 +37,7 @@ export function Topbar({ user }: { user: User }) {
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-2 sm:gap-4 border-b bg-background/80 backdrop-blur px-4 sm:px-6">
       <MobileNav />
-      <BrandLogo className="hidden lg:block" compact />
+      <BrandLogo className="block md:hidden" compact />
       <button
         type="button"
         onClick={() => {
