@@ -126,6 +126,13 @@ function toneClass(v: number | null) {
   return v > 0 ? "text-emerald-600" : "text-destructive";
 }
 
+function lastTrendValue(points: Array<{ bucket: string; [k: string]: number | string | undefined }>, key: string) {
+  const last = points[points.length - 1];
+  if (!last) return 0;
+  const n = Number(last[key] ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
 function PolylineChart({
   data,
   series,
@@ -261,7 +268,9 @@ export function DashboardClient() {
       ) : null}
 
       {loading || !data ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+          <CardSkeleton />
+          <CardSkeleton />
           <CardSkeleton />
           <CardSkeleton />
           <CardSkeleton />
@@ -269,109 +278,76 @@ export function DashboardClient() {
         </div>
       ) : (
         <>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
             <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Quotations</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-3xl font-semibold">{data.kpis.quotations.total}</span>
-                  <FileText className="h-5 w-5 text-muted-foreground" />
+              <CardContent className="p-3">
+                <div className="text-[11px] text-muted-foreground">Quotations</div>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="text-2xl font-semibold tabular-nums">{data.kpis.quotations.total}</span>
+                  <FileText className="h-4 w-4 text-muted-foreground" />
                 </div>
-                <div className="text-xs text-muted-foreground">Pending: {data.kpis.quotations.pendingApproval}</div>
-                <div className="text-xs text-muted-foreground">Sent today: {data.kpis.quotations.sentToday}</div>
-                <div className="text-xs text-destructive">Overdue follow-up: {data.kpis.quotations.overdueFollowUp}</div>
-                <Button asChild size="sm" variant="outline" className="mt-2 w-full">
-                  <Link href={data.kpis.quotations.ctaHref}>View Pending</Link>
-                </Button>
+                <div className="mt-1 text-[11px] text-muted-foreground">Pending {data.kpis.quotations.pendingApproval}</div>
               </CardContent>
             </Card>
-
             <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Inquiries</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-3xl font-semibold">{data.kpis.inquiries.open}</span>
-                  <Inbox className="h-5 w-5 text-muted-foreground" />
+              <CardContent className="p-3">
+                <div className="text-[11px] text-muted-foreground">Inquiries Open</div>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="text-2xl font-semibold tabular-nums">{data.kpis.inquiries.open}</span>
+                  <Inbox className="h-4 w-4 text-muted-foreground" />
                 </div>
-                <div className="text-xs text-muted-foreground">New today: {data.kpis.inquiries.newToday}</div>
-                <div className="text-xs text-muted-foreground">Need quotation: {data.kpis.inquiries.needQuotation}</div>
-                <div className="text-xs text-destructive">SLA breached: {data.kpis.inquiries.slaBreached}</div>
-                <Button asChild size="sm" variant="outline" className="mt-2 w-full">
-                  <Link href={data.kpis.inquiries.ctaHref}>Open Queue</Link>
-                </Button>
+                <div className="mt-1 text-[11px] text-muted-foreground">Need quote {data.kpis.inquiries.needQuotation}</div>
               </CardContent>
             </Card>
-
             <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Customers</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-3xl font-semibold">{data.kpis.customers.total}</span>
-                  <Users className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <div className="text-xs text-muted-foreground">New this month: {data.kpis.customers.newThisMonth}</div>
-                <div className="text-xs text-muted-foreground">Inactive &gt;30d: {data.kpis.customers.inactive30Days}</div>
-                <div className="text-xs text-muted-foreground">Repeat customers: {data.kpis.customers.repeatCustomersPct.toFixed(1)}%</div>
-                <Button asChild size="sm" variant="outline" className="mt-2 w-full">
-                  <Link href={data.kpis.customers.ctaHref}>View Customers</Link>
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Revenue</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-2xl font-semibold">{formatINR(data.kpis.revenue.wonThisMonth)}</span>
+              <CardContent className="p-3">
+                <div className="text-[11px] text-muted-foreground">Revenue Won</div>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="text-xl font-semibold tabular-nums">{formatINR(data.kpis.revenue.wonThisMonth)}</span>
                   {data.kpis.revenue.direction === "up" ? (
-                    <ArrowUpRight className="h-5 w-5 text-emerald-600" />
+                    <ArrowUpRight className="h-4 w-4 text-emerald-600" />
                   ) : data.kpis.revenue.direction === "down" ? (
-                    <ArrowDownRight className="h-5 w-5 text-destructive" />
+                    <ArrowDownRight className="h-4 w-4 text-destructive" />
                   ) : (
-                    <Clock3 className="h-5 w-5 text-muted-foreground" />
+                    <Clock3 className="h-4 w-4 text-muted-foreground" />
                   )}
                 </div>
-                <div className="text-xs text-muted-foreground">Prev month: {formatINR(data.kpis.revenue.wonPreviousMonth)}</div>
-                <div className={`text-xs font-medium ${toneClass(data.kpis.revenue.growthPct)}`}>
-                  Growth: {pctText(data.kpis.revenue.growthPct)}
+                <div className={`mt-1 text-[11px] ${toneClass(data.kpis.revenue.growthPct)}`}>{pctText(data.kpis.revenue.growthPct)}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-3">
+                <div className="text-[11px] text-muted-foreground">Customers</div>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="text-2xl font-semibold tabular-nums">{data.kpis.customers.total}</span>
+                  <Users className="h-4 w-4 text-muted-foreground" />
                 </div>
-                <Button asChild size="sm" variant="outline" className="mt-2 w-full">
-                  <Link href={data.kpis.revenue.ctaHref}>View Won</Link>
-                </Button>
+                <div className="mt-1 text-[11px] text-muted-foreground">New {data.kpis.customers.newThisMonth}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-3">
+                <div className="text-[11px] text-muted-foreground">SLA Breaches</div>
+                <div className="mt-1 text-2xl font-semibold tabular-nums text-destructive">
+                  {data.kpis.inquiries.slaBreached + data.kpis.quotations.overdueFollowUp}
+                </div>
+                <div className="mt-1 text-[11px] text-muted-foreground">Inq + quotation</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-3">
+                <div className="text-[11px] text-muted-foreground">Sent Today</div>
+                <div className="mt-1 text-2xl font-semibold tabular-nums">{data.kpis.quotations.sentToday}</div>
+                <div className="mt-1 text-[11px] text-muted-foreground">New inquiries {data.kpis.inquiries.newToday}</div>
               </CardContent>
             </Card>
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Current vs Previous Month</CardTitle>
-              <CardDescription>{data.comparison.currentLabel} compared to {data.comparison.previousLabel}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {data.comparison.rows.map((r) => (
-                <div key={r.key} className="grid grid-cols-[1.5fr_1fr_1fr_1fr] items-center gap-2 rounded-md border p-2.5 text-sm">
-                  <div className="font-medium">{r.label}</div>
-                  <div className="text-right tabular-nums">{r.key === "revenue" ? formatINR(r.current) : r.current}</div>
-                  <div className="text-right tabular-nums text-muted-foreground">{r.key === "revenue" ? formatINR(r.previous) : r.previous}</div>
-                  <div className={`text-right tabular-nums font-medium ${toneClass(r.changePct)}`}>{pctText(r.changePct)}</div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <div className="grid gap-4 xl:grid-cols-3">
-            <Card className="xl:col-span-2">
+          <div className="grid gap-3 xl:grid-cols-2">
+            <Card>
               <CardHeader>
-                <CardTitle className="text-base">Quotations Trend</CardTitle>
-                <CardDescription>Created, sent, won and lost trend for selected period.</CardDescription>
+                <CardTitle className="text-sm">Quotations Trend</CardTitle>
+                <CardDescription>Created, sent, won, lost</CardDescription>
               </CardHeader>
               <CardContent>
                 <PolylineChart
@@ -388,33 +364,8 @@ export function DashboardClient() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Action Center</CardTitle>
-                <CardDescription>Top priority actions right now.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {data.actionCenter.map((a) => (
-                  <Link key={a.id} href={a.href} className="block rounded-md border p-3 transition-colors hover:bg-muted/40">
-                    <div className="flex items-start gap-2">
-                      <AlertTriangle className={`mt-0.5 h-4 w-4 ${a.tone === "danger" ? "text-destructive" : a.tone === "warning" ? "text-amber-500" : "text-muted-foreground"}`} />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium leading-tight">{a.title}</div>
-                        <div className="mt-1 text-xs text-muted-foreground">{a.description}</div>
-                        {a.amount != null ? (
-                          <div className="mt-1 text-xs font-medium text-muted-foreground">{formatINR(a.amount)}</div>
-                        ) : null}
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Revenue Trend</CardTitle>
-                <CardDescription>Quoted vs won vs lost value trend.</CardDescription>
+                <CardTitle className="text-sm">Revenue Trend</CardTitle>
+                <CardDescription>Quoted vs won vs lost</CardDescription>
               </CardHeader>
               <CardContent>
                 <PolylineChart
@@ -428,109 +379,73 @@ export function DashboardClient() {
                 />
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Inquiry Trend</CardTitle>
-                <CardDescription>Daily incoming inquiries.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <PolylineChart
-                  data={data.trends.inquiries}
-                  series={[{ key: "incoming", label: "Incoming", color: "#7c3aed" }]}
-                />
-              </CardContent>
-            </Card>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-3">
-            <Card>
+          <div className="grid gap-3 xl:grid-cols-3">
+            <Card className="xl:col-span-2">
               <CardHeader>
-                <CardTitle className="text-base">Inquiry SLA</CardTitle>
-                <CardDescription>Acknowledge in 2h and quote in 24h.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="space-y-2">
-                  <div className="text-xs font-medium text-muted-foreground">Acknowledgement</div>
-                  <StatusPill label="Within SLA" value={data.sla.inquiries.acknowledgement.within} tone="success" />
-                  <StatusPill label="Near breach" value={data.sla.inquiries.acknowledgement.near} tone="warning" />
-                  <StatusPill label="Breached" value={data.sla.inquiries.acknowledgement.breached} tone="destructive" />
-                </div>
-                <div className="space-y-2">
-                  <div className="text-xs font-medium text-muted-foreground">Quotation creation</div>
-                  <StatusPill label="Within SLA" value={data.sla.inquiries.quotationCreation.within} tone="success" />
-                  <StatusPill label="Near breach" value={data.sla.inquiries.quotationCreation.near} tone="warning" />
-                  <StatusPill label="Breached" value={data.sla.inquiries.quotationCreation.breached} tone="destructive" />
-                </div>
-                <Button asChild variant="outline" size="sm" className="w-full">
-                  <Link href={data.sla.inquiries.quotationCreation.href}>Open Inquiry SLA Queue</Link>
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Quotation SLA</CardTitle>
-                <CardDescription>Follow-up in 3d and negotiation closure in 7d.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="space-y-2">
-                  <div className="text-xs font-medium text-muted-foreground">Follow-up</div>
-                  <StatusPill label="Within SLA" value={data.sla.quotations.followUp.within} tone="success" />
-                  <StatusPill label="Near breach" value={data.sla.quotations.followUp.near} tone="warning" />
-                  <StatusPill label="Breached" value={data.sla.quotations.followUp.breached} tone="destructive" />
-                </div>
-                <div className="space-y-2">
-                  <div className="text-xs font-medium text-muted-foreground">Negotiation closure</div>
-                  <StatusPill label="Within SLA" value={data.sla.quotations.negotiationClosure.within} tone="success" />
-                  <StatusPill label="Near breach" value={data.sla.quotations.negotiationClosure.near} tone="warning" />
-                  <StatusPill label="Breached" value={data.sla.quotations.negotiationClosure.breached} tone="destructive" />
-                </div>
-                <Button asChild variant="outline" size="sm" className="w-full">
-                  <Link href={data.sla.quotations.followUp.href}>Open Quotation SLA Queue</Link>
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Sales Funnel</CardTitle>
-                <CardDescription>Inquiry to win conversion path.</CardDescription>
+                <CardTitle className="text-sm">Recent Activity</CardTitle>
+                <CardDescription>Latest business movement in selected window</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
-                {data.funnel.map((s) => (
-                  <Link key={s.key} href={s.href} className="block rounded-md border p-2.5 transition-colors hover:bg-muted/40">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium">{s.label}</span>
-                      <span className="tabular-nums">{s.count}</span>
-                    </div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {s.conversionPct == null ? "Base stage" : `Conversion: ${s.conversionPct.toFixed(1)}%`}
+                <div className="rounded-md bg-muted/30 px-2.5 py-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span>Revenue growth this period</span>
+                    <span className={`font-medium ${toneClass(data.kpis.revenue.growthPct)}`}>{pctText(data.kpis.revenue.growthPct)}</span>
+                  </div>
+                </div>
+                <div className="rounded-md bg-muted/30 px-2.5 py-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span>Latest inquiries bucket</span>
+                    <span className="font-medium tabular-nums">{lastTrendValue(data.trends.inquiries, "incoming")}</span>
+                  </div>
+                </div>
+                <div className="rounded-md bg-muted/30 px-2.5 py-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span>Quotation wins in latest bucket</span>
+                    <span className="font-medium tabular-nums text-emerald-600">{lastTrendValue(data.trends.quotations, "won")}</span>
+                  </div>
+                </div>
+                <div className="rounded-md bg-muted/30 px-2.5 py-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span>Current vs previous period volume</span>
+                    <span className="font-medium">{data.comparison.currentLabel} vs {data.comparison.previousLabel}</span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button asChild size="sm" variant="outline"><Link href={data.kpis.quotations.ctaHref}>Quotations</Link></Button>
+                  <Button asChild size="sm" variant="outline"><Link href={data.kpis.inquiries.ctaHref}>Inquiries</Link></Button>
+                  <Button asChild size="sm" variant="outline"><Link href={data.kpis.revenue.ctaHref}>Won Deals</Link></Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Alerts</CardTitle>
+                <CardDescription>Priority exceptions needing action</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Link href={data.sla.inquiries.quotationCreation.href} className="block rounded-md bg-muted/30 px-2.5 py-2 text-sm transition-colors hover:bg-muted/50">
+                  <div className="flex items-center justify-between">
+                    <span className="inline-flex items-center gap-2"><AlertTriangle className="h-3.5 w-3.5 text-destructive" /> Inquiry SLA breached</span>
+                    <span className="font-medium tabular-nums text-destructive">{data.sla.inquiries.quotationCreation.breached}</span>
+                  </div>
+                </Link>
+                <Link href={data.sla.quotations.followUp.href} className="block rounded-md bg-muted/30 px-2.5 py-2 text-sm transition-colors hover:bg-muted/50">
+                  <div className="flex items-center justify-between">
+                    <span className="inline-flex items-center gap-2"><AlertTriangle className="h-3.5 w-3.5 text-amber-500" /> Quotation follow-up due</span>
+                    <span className="font-medium tabular-nums">{data.sla.quotations.followUp.near + data.sla.quotations.followUp.breached}</span>
+                  </div>
+                </Link>
+                {data.actionCenter.slice(0, 4).map((a) => (
+                  <Link key={a.id} href={a.href} className="block rounded-md bg-muted/30 px-2.5 py-2 text-sm transition-colors hover:bg-muted/50">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate">{a.title}</span>
+                      <span className="font-medium tabular-nums">{a.count}</span>
                     </div>
                   </Link>
                 ))}
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Quotations Aging</CardTitle>
-                <CardDescription>Pending work by age bucket.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <AgingBars rows={data.aging.quotations} showAmount />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Inquiry Aging</CardTitle>
-                <CardDescription>Open inquiry pressure by age bucket.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <AgingBars rows={data.aging.inquiries} />
               </CardContent>
             </Card>
           </div>
