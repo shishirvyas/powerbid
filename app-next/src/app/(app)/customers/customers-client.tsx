@@ -1,22 +1,20 @@
 "use client";
 
 import * as React from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Check, Loader2, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import { PageHeader, EmptyState } from "@/components/page-header";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Select } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  FormField,
+  getServerFieldErrors,
+  summarizeFieldErrors,
+  useFieldErrors,
+} from "@/components/form-field";
+import { EmptyState, PageHeader } from "@/components/page-header";
+import { Pagination } from "@/components/pagination";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -25,17 +23,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ConfirmDialog } from "@/components/confirm-dialog";
-import { Pagination } from "@/components/pagination";
-import { TableSkeleton } from "@/components/table-skeleton";
-import {
-  FormField,
-  getServerFieldErrors,
-  summarizeFieldErrors,
-  useFieldErrors,
-} from "@/components/form-field";
-import { useDebounced, useList, useResource } from "@/lib/hooks";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { api, ApiClientError } from "@/lib/api-client";
+import { useDebounced, useList, useResource } from "@/lib/hooks";
 
 type Customer = {
   id: number;
@@ -55,6 +47,16 @@ type Customer = {
   notes: string | null;
   isActive: boolean;
   createdAt: string;
+};
+
+type DetailTab = "profile" | "address" | "notes";
+
+type QuickEditDraft = {
+  name: string;
+  contactPerson: string;
+  phone: string;
+  city: string;
+  isActive: boolean;
 };
 
 const empty: Partial<Customer> = {
@@ -92,16 +94,6 @@ const labelMap: Record<string, string> = {
   notes: "Notes",
 };
 
-type DetailTab = "profile" | "address" | "notes";
-
-type QuickEditDraft = {
-  name: string;
-  contactPerson: string;
-  phone: string;
-  city: string;
-  isActive: boolean;
-};
-
 function toQuickDraft(c: Customer): QuickEditDraft {
   return {
     name: c.name,
@@ -134,20 +126,21 @@ function customerPayload(c: Customer, quick: QuickEditDraft): Partial<Customer> 
 
 export function CustomersClient() {
   const [search, setSearch] = React.useState("");
-  const q = useDebounced(search, 300);
-  const [limit, setLimit] = React.useState(25);
+  const q = useDebounced(search, 220);
+  const [limit, setLimit] = React.useState(100);
   const [offset, setOffset] = React.useState(0);
 
   React.useEffect(() => {
     setOffset(0);
   }, [q, limit]);
 
-  const { data, loading, error, refresh } = useList<Customer>("/api/customers", {
+  const { data, loading, error, refresh, mutate } = useList<Customer>("/api/customers", {
     q,
     limit,
     offset,
   });
 
+  const rows = data?.rows ?? [];
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Customer | null>(null);
   const [confirmDel, setConfirmDel] = React.useState<Customer | null>(null);
@@ -158,8 +151,8 @@ export function CustomersClient() {
   const [quickSaving, setQuickSaving] = React.useState(false);
 
   const selectedRow = React.useMemo(
-    () => data?.rows.find((row) => row.id === selectedId) ?? null,
-    [data?.rows, selectedId],
+    () => rows.find((row) => row.id === selectedId) ?? null,
+    [rows, selectedId],
   );
 
   const {
@@ -170,60 +163,123 @@ export function CustomersClient() {
   } = useResource<Customer>(selectedId ? `/api/customers/${selectedId}` : null);
 
   React.useEffect(() => {
-    if (!data?.rows?.length) {
+    if (!rows.length) {
       setSelectedId(null);
       return;
     }
-    if (!selectedId || !data.rows.some((r) => r.id === selectedId)) {
-      setSelectedId(data.rows[0]?.id ?? null);
+    if (!selectedId || !rows.some((r) => r.id === selectedId)) {
+      setSelectedId(rows[0]?.id ?? null);
     }
-  }, [data?.rows, selectedId]);
+  }, [rows, selectedId]);
 
-  function openCreate() {
+  const detail = selectedDetail ?? selectedRow;
+
+  const scrollRef = React.useRef<HTMLDivElement | null>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 46,
+    overscan: 10,
+  });
+
+  const virtualRows = rowVirtualizer.getVirtualItems();
+
+  const openCreate = React.useCallback(() => {
     setEditing(null);
     setDialogOpen(true);
-  }
-  function openEdit(c: Customer) {
+  }, []);
+
+  const openEdit = React.useCallback((c: Customer) => {
     setSelectedId(c.id);
     setEditing(c);
     setDialogOpen(true);
-  }
+  }, []);
 
-  function startQuickEdit(c: Customer) {
+  const startQuickEdit = React.useCallback((c: Customer) => {
     setQuickEditId(c.id);
     setQuickDraft(toQuickDraft(c));
-  }
+  }, []);
 
-  function cancelQuickEdit() {
+  const cancelQuickEdit = React.useCallback(() => {
     setQuickEditId(null);
     setQuickDraft(null);
-  }
+  }, []);
 
-  async function saveQuickEdit(c: Customer) {
-    if (!quickDraft) return;
-    const trimmedName = quickDraft.name.trim();
-    if (!trimmedName) {
-      toast.error("Name is required");
-      return;
+  const saveQuickEdit = React.useCallback(
+    async (c: Customer) => {
+      if (!quickDraft) return;
+      const trimmedName = quickDraft.name.trim();
+      if (!trimmedName) {
+        toast.error("Name is required");
+        return;
+      }
+
+      const prev = data ?? null;
+      const optimistic: Customer = {
+        ...c,
+        name: trimmedName,
+        contactPerson: quickDraft.contactPerson || null,
+        phone: quickDraft.phone || null,
+        city: quickDraft.city || null,
+        isActive: quickDraft.isActive,
+      };
+
+      mutate((curr) =>
+        curr
+          ? {
+              ...curr,
+              rows: curr.rows.map((r) => (r.id === c.id ? optimistic : r)),
+            }
+          : curr,
+      );
+
+      setQuickSaving(true);
+      try {
+        await api(`/api/customers/${c.id}`, {
+          method: "PUT",
+          json: customerPayload(c, { ...quickDraft, name: trimmedName }),
+        });
+        toast.success("Customer updated");
+        cancelQuickEdit();
+        refreshDetail();
+      } catch (err) {
+        mutate(() => prev);
+        toast.error(err instanceof ApiClientError ? err.message : "Quick update failed");
+      } finally {
+        setQuickSaving(false);
+      }
+    },
+    [cancelQuickEdit, data, mutate, quickDraft, refreshDetail],
+  );
+
+  const deleteCustomer = React.useCallback(async () => {
+    if (!confirmDel) return;
+    const prev = data ?? null;
+    const deletingId = confirmDel.id;
+
+    mutate((curr) => {
+      if (!curr) return curr;
+      const nextRows = curr.rows.filter((r) => r.id !== deletingId);
+      return {
+        ...curr,
+        rows: nextRows,
+        total: Math.max(0, curr.total - 1),
+      };
+    });
+
+    if (selectedId === deletingId) {
+      setSelectedId(rows.find((r) => r.id !== deletingId)?.id ?? null);
     }
-    setQuickSaving(true);
+
     try {
-      await api(`/api/customers/${c.id}`, {
-        method: "PUT",
-        json: customerPayload(c, { ...quickDraft, name: trimmedName }),
-      });
-      toast.success("Customer updated");
-      cancelQuickEdit();
-      refresh();
-      refreshDetail();
-    } catch (err) {
-      toast.error(err instanceof ApiClientError ? err.message : "Quick update failed");
-    } finally {
-      setQuickSaving(false);
+      await api(`/api/customers/${deletingId}`, { method: "DELETE" });
+      toast.success("Customer deleted");
+      setConfirmDel(null);
+    } catch (e) {
+      mutate(() => prev);
+      toast.error(e instanceof ApiClientError ? e.message : "Delete failed");
     }
-  }
-
-  const detail = selectedDetail ?? selectedRow;
+  }, [confirmDel, data, mutate, rows, selectedId]);
 
   return (
     <div className="space-y-6 animate-in fade-in-50">
@@ -238,7 +294,7 @@ export function CustomersClient() {
       />
 
       <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Search by name, code, email..."
           value={search}
@@ -253,201 +309,63 @@ export function CustomersClient() {
         </div>
       ) : null}
 
-      {!loading && data && data.rows.length === 0 ? (
+      {!loading && data && rows.length === 0 ? (
         <EmptyState
           title={q ? "No customers match your search" : "No customers yet"}
           description={q ? undefined : "Create your first customer to get started."}
-          action={
-            !q ? (
-              <Button onClick={openCreate}>
-                <Plus className="h-4 w-4" /> New customer
-              </Button>
-            ) : null
-          }
+          action={!q ? <Button onClick={openCreate}>New customer</Button> : null}
         />
       ) : (
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1.3fr)_minmax(22rem,0.9fr)]">
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.9fr)]">
           <div className="space-y-3">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Code</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead className="hidden md:table-cell">Contact</TableHead>
-                  <TableHead className="hidden lg:table-cell">Phone</TableHead>
-                  <TableHead className="hidden xl:table-cell">City</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <div className="rounded-md border">
+              <div className="grid h-9 grid-cols-[7rem_minmax(12rem,1fr)_minmax(10rem,0.9fr)_minmax(9rem,0.8fr)_minmax(8rem,0.8fr)_7rem_8rem] items-center gap-2 border-b bg-muted/30 px-2 text-xs font-medium text-muted-foreground">
+                <div>Code</div>
+                <div>Name</div>
+                <div>Contact</div>
+                <div>Phone</div>
+                <div>City</div>
+                <div>Status</div>
+                <div className="text-right">Actions</div>
+              </div>
+
+              <div ref={scrollRef} className="h-[56vh] overflow-auto">
                 {loading && !data ? (
-                  <TableSkeleton cols={7} rows={6} />
+                  <div className="p-4 text-sm text-muted-foreground">Loading customers...</div>
                 ) : (
-                  data?.rows.map((c) => {
-                    const isActiveRow = c.id === selectedId;
-                    const isQuickEditing = c.id === quickEditId;
-                    return (
-                      <TableRow
-                        key={c.id}
-                        className={[
-                          "group cursor-pointer transition-colors hover:bg-muted/40",
-                          isActiveRow ? "bg-primary/5" : "",
-                        ].join(" ")}
-                        onClick={() => {
-                          setSelectedId(c.id);
-                          setDetailTab("profile");
-                        }}
-                      >
-                        <TableCell className="font-mono text-xs">{c.code}</TableCell>
-                        <TableCell className="font-medium">
-                          {isQuickEditing ? (
-                            <Input
-                              value={quickDraft?.name ?? ""}
-                              onChange={(e) =>
-                                setQuickDraft((prev) => (prev ? { ...prev, name: e.target.value } : prev))
-                              }
-                              onClick={(e) => e.stopPropagation()}
-                              className="h-8"
-                            />
-                          ) : (
-                            c.name
-                          )}
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell text-sm">
-                          {isQuickEditing ? (
-                            <Input
-                              value={quickDraft?.contactPerson ?? ""}
-                              onChange={(e) =>
-                                setQuickDraft((prev) =>
-                                  prev ? { ...prev, contactPerson: e.target.value } : prev,
-                                )
-                              }
-                              onClick={(e) => e.stopPropagation()}
-                              className="h-8"
-                            />
-                          ) : (
-                            c.contactPerson || "-"
-                          )}
-                        </TableCell>
-                        <TableCell className="hidden lg:table-cell text-sm">
-                          {isQuickEditing ? (
-                            <Input
-                              value={quickDraft?.phone ?? ""}
-                              onChange={(e) =>
-                                setQuickDraft((prev) => (prev ? { ...prev, phone: e.target.value } : prev))
-                              }
-                              onClick={(e) => e.stopPropagation()}
-                              className="h-8"
-                            />
-                          ) : (
-                            c.phone || "-"
-                          )}
-                        </TableCell>
-                        <TableCell className="hidden xl:table-cell text-sm">
-                          {isQuickEditing ? (
-                            <Input
-                              value={quickDraft?.city ?? ""}
-                              onChange={(e) =>
-                                setQuickDraft((prev) => (prev ? { ...prev, city: e.target.value } : prev))
-                              }
-                              onClick={(e) => e.stopPropagation()}
-                              className="h-8"
-                            />
-                          ) : (
-                            c.city || "-"
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {isQuickEditing ? (
-                            <Select
-                              value={quickDraft?.isActive ? "1" : "0"}
-                              onChange={(e) =>
-                                setQuickDraft((prev) =>
-                                  prev ? { ...prev, isActive: e.target.value === "1" } : prev,
-                                )
-                              }
-                              onClick={(e) => e.stopPropagation()}
-                              className="h-8"
-                            >
-                              <option value="1">Active</option>
-                              <option value="0">Inactive</option>
-                            </Select>
-                          ) : (
-                            <Badge variant={c.isActive ? "success" : "muted"}>
-                              {c.isActive ? "Active" : "Inactive"}
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div
-                            className={[
-                              "flex justify-end gap-1 transition-opacity",
-                              isQuickEditing ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-                            ].join(" ")}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {isQuickEditing ? (
-                              <>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => saveQuickEdit(c)}
-                                  disabled={quickSaving}
-                                  aria-label="Save quick edit"
-                                >
-                                  {quickSaving ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <Check className="h-4 w-4 text-emerald-600" />
-                                  )}
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={cancelQuickEdit}
-                                  disabled={quickSaving}
-                                  aria-label="Cancel quick edit"
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </>
-                            ) : (
-                              <>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => startQuickEdit(c)}
-                                  aria-label="Quick edit"
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => openEdit(c)}
-                                  aria-label="Edit in dialog"
-                                >
-                                  <Pencil className="h-4 w-4 text-muted-foreground" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => setConfirmDel(c)}
-                                  aria-label="Delete"
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
+                  <div className="relative" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
+                    {virtualRows.map((v) => {
+                      const c = rows[v.index];
+                      if (!c) return null;
+                      return (
+                        <CustomerVirtualRow
+                          key={c.id}
+                          customer={c}
+                          top={v.start}
+                          selected={c.id === selectedId}
+                          quickEditing={c.id === quickEditId}
+                          quickDraft={quickDraft}
+                          quickSaving={quickSaving}
+                          onSelect={() => {
+                            setSelectedId(c.id);
+                            setDetailTab("profile");
+                          }}
+                          onStartQuickEdit={() => startQuickEdit(c)}
+                          onOpenEdit={() => openEdit(c)}
+                          onDelete={() => setConfirmDel(c)}
+                          onCancelQuickEdit={cancelQuickEdit}
+                          onSaveQuickEdit={() => saveQuickEdit(c)}
+                          onQuickDraftChange={(next) =>
+                            setQuickDraft((prev) => (prev ? { ...prev, ...next } : prev))
+                          }
+                        />
+                      );
+                    })}
+                  </div>
                 )}
-              </TableBody>
-            </Table>
+              </div>
+            </div>
+
             {data ? (
               <Pagination
                 total={data.total}
@@ -459,94 +377,15 @@ export function CustomersClient() {
             ) : null}
           </div>
 
-          <aside className="rounded-lg border bg-card p-3 md:p-4 xl:sticky xl:top-16 xl:h-fit">
-            {!selectedId ? (
-              <div className="text-sm text-muted-foreground">Select a customer to view details.</div>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm text-muted-foreground">Customer details</div>
-                    <div className="text-lg font-semibold leading-tight">{detail?.name ?? "Loading..."}</div>
-                    <div className="text-xs text-muted-foreground">{detail?.code ?? ""}</div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {detail?.isActive !== undefined ? (
-                      <Badge variant={detail.isActive ? "success" : "muted"}>
-                        {detail.isActive ? "Active" : "Inactive"}
-                      </Badge>
-                    ) : null}
-                    {detail ? (
-                      <Button size="sm" variant="outline" onClick={() => openEdit(detail)}>
-                        <Pencil className="h-4 w-4" /> Edit
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="flex rounded-md border bg-muted/30 p-1">
-                  {([
-                    ["profile", "Profile"],
-                    ["address", "Address"],
-                    ["notes", "Notes"],
-                  ] as Array<[DetailTab, string]>).map(([key, label]) => (
-                    <Button
-                      key={key}
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setDetailTab(key)}
-                      className={[
-                        "h-8 flex-1 rounded-sm",
-                        detailTab === key ? "bg-background shadow-sm" : "",
-                      ].join(" ")}
-                    >
-                      {label}
-                    </Button>
-                  ))}
-                </div>
-
-                {detailLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" /> Loading details...
-                  </div>
-                ) : detailError ? (
-                  <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                    {detailError}
-                  </div>
-                ) : detail ? (
-                  <div className="space-y-2 text-sm">
-                    {detailTab === "profile" ? (
-                      <>
-                        <DetailRow label="Contact" value={detail.contactPerson || "-"} />
-                        <DetailRow label="Email" value={detail.email || "-"} />
-                        <DetailRow label="Phone" value={detail.phone || "-"} />
-                        <DetailRow label="GSTIN" value={detail.gstin || "-"} />
-                        <DetailRow label="PAN" value={detail.pan || "-"} />
-                      </>
-                    ) : null}
-                    {detailTab === "address" ? (
-                      <>
-                        <DetailRow label="Line 1" value={detail.addressLine1 || "-"} />
-                        <DetailRow label="Line 2" value={detail.addressLine2 || "-"} />
-                        <DetailRow label="City" value={detail.city || "-"} />
-                        <DetailRow label="State" value={detail.state || "-"} />
-                        <DetailRow label="Pincode" value={detail.pincode || "-"} />
-                        <DetailRow label="Country" value={detail.country || "-"} />
-                      </>
-                    ) : null}
-                    {detailTab === "notes" ? (
-                      <div className="rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
-                        {detail.notes?.trim() || "No notes added."}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : (
-                  <div className="text-sm text-muted-foreground">No customer selected.</div>
-                )}
-              </div>
-            )}
-          </aside>
+          <CustomerDetailPanel
+            detail={detail}
+            detailError={detailError}
+            detailLoading={detailLoading}
+            detailTab={detailTab}
+            selectedId={selectedId}
+            onEdit={openEdit}
+            onTabChange={setDetailTab}
+          />
         </div>
       )}
 
@@ -567,22 +406,278 @@ export function CustomersClient() {
         description={confirmDel ? `"${confirmDel.name}" will be permanently removed.` : undefined}
         confirmLabel="Delete"
         variant="destructive"
-        onConfirm={async () => {
-          if (!confirmDel) return;
-          try {
-            await api(`/api/customers/${confirmDel.id}`, { method: "DELETE" });
-            toast.success("Customer deleted");
-            if (selectedId === confirmDel.id) setSelectedId(null);
-            setConfirmDel(null);
-            refresh();
-          } catch (e) {
-            toast.error(e instanceof ApiClientError ? e.message : "Delete failed");
-          }
-        }}
+        onConfirm={deleteCustomer}
       />
     </div>
   );
 }
+
+type CustomerVirtualRowProps = {
+  customer: Customer;
+  top: number;
+  selected: boolean;
+  quickEditing: boolean;
+  quickDraft: QuickEditDraft | null;
+  quickSaving: boolean;
+  onSelect: () => void;
+  onStartQuickEdit: () => void;
+  onOpenEdit: () => void;
+  onDelete: () => void;
+  onCancelQuickEdit: () => void;
+  onSaveQuickEdit: () => void;
+  onQuickDraftChange: (next: Partial<QuickEditDraft>) => void;
+};
+
+const CustomerVirtualRow = React.memo(function CustomerVirtualRow({
+  customer,
+  top,
+  selected,
+  quickEditing,
+  quickDraft,
+  quickSaving,
+  onSelect,
+  onStartQuickEdit,
+  onOpenEdit,
+  onDelete,
+  onCancelQuickEdit,
+  onSaveQuickEdit,
+  onQuickDraftChange,
+}: CustomerVirtualRowProps) {
+  return (
+    <div
+      className={[
+        "group absolute left-0 right-0 grid h-[46px] cursor-pointer grid-cols-[7rem_minmax(12rem,1fr)_minmax(10rem,0.9fr)_minmax(9rem,0.8fr)_minmax(8rem,0.8fr)_7rem_8rem] items-center gap-2 border-b px-2 text-sm",
+        selected ? "bg-primary/5" : "hover:bg-muted/40",
+      ].join(" ")}
+      style={{ transform: `translateY(${top}px)` }}
+      onClick={onSelect}
+    >
+      <div className="truncate font-mono text-xs">{customer.code}</div>
+      <div className="truncate font-medium">
+        {quickEditing ? (
+          <Input
+            value={quickDraft?.name ?? ""}
+            onChange={(e) => onQuickDraftChange({ name: e.target.value })}
+            onClick={(e) => e.stopPropagation()}
+            className="h-8"
+          />
+        ) : (
+          customer.name
+        )}
+      </div>
+      <div className="truncate">
+        {quickEditing ? (
+          <Input
+            value={quickDraft?.contactPerson ?? ""}
+            onChange={(e) => onQuickDraftChange({ contactPerson: e.target.value })}
+            onClick={(e) => e.stopPropagation()}
+            className="h-8"
+          />
+        ) : (
+          customer.contactPerson || "-"
+        )}
+      </div>
+      <div className="truncate">
+        {quickEditing ? (
+          <Input
+            value={quickDraft?.phone ?? ""}
+            onChange={(e) => onQuickDraftChange({ phone: e.target.value })}
+            onClick={(e) => e.stopPropagation()}
+            className="h-8"
+          />
+        ) : (
+          customer.phone || "-"
+        )}
+      </div>
+      <div className="truncate">
+        {quickEditing ? (
+          <Input
+            value={quickDraft?.city ?? ""}
+            onChange={(e) => onQuickDraftChange({ city: e.target.value })}
+            onClick={(e) => e.stopPropagation()}
+            className="h-8"
+          />
+        ) : (
+          customer.city || "-"
+        )}
+      </div>
+      <div>
+        {quickEditing ? (
+          <Select
+            value={quickDraft?.isActive ? "1" : "0"}
+            onChange={(e) => onQuickDraftChange({ isActive: e.target.value === "1" })}
+            onClick={(e) => e.stopPropagation()}
+            className="h-8"
+          >
+            <option value="1">Active</option>
+            <option value="0">Inactive</option>
+          </Select>
+        ) : (
+          <Badge variant={customer.isActive ? "success" : "muted"}>
+            {customer.isActive ? "Active" : "Inactive"}
+          </Badge>
+        )}
+      </div>
+      <div className="text-right" onClick={(e) => e.stopPropagation()}>
+        <div
+          className={[
+            "flex justify-end gap-1 transition-opacity",
+            quickEditing ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+          ].join(" ")}
+        >
+          {quickEditing ? (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onSaveQuickEdit}
+                disabled={quickSaving}
+                aria-label="Save quick edit"
+              >
+                {quickSaving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4 text-emerald-600" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onCancelQuickEdit}
+                disabled={quickSaving}
+                aria-label="Cancel quick edit"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" size="icon" onClick={onStartQuickEdit} aria-label="Quick edit">
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={onOpenEdit} aria-label="Edit in dialog">
+                <Pencil className="h-4 w-4 text-muted-foreground" />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={onDelete} aria-label="Delete">
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+type CustomerDetailPanelProps = {
+  selectedId: number | null;
+  detail: Customer | null;
+  detailLoading: boolean;
+  detailError: string | null;
+  detailTab: DetailTab;
+  onTabChange: (tab: DetailTab) => void;
+  onEdit: (c: Customer) => void;
+};
+
+const CustomerDetailPanel = React.memo(function CustomerDetailPanel({
+  selectedId,
+  detail,
+  detailLoading,
+  detailError,
+  detailTab,
+  onTabChange,
+  onEdit,
+}: CustomerDetailPanelProps) {
+  return (
+    <aside className="rounded-lg border bg-card p-3 md:p-4 xl:sticky xl:top-16 xl:h-fit">
+      {!selectedId ? (
+        <div className="text-sm text-muted-foreground">Select a customer to view details.</div>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm text-muted-foreground">Customer details</div>
+              <div className="text-lg font-semibold leading-tight">{detail?.name ?? "Loading..."}</div>
+              <div className="text-xs text-muted-foreground">{detail?.code ?? ""}</div>
+            </div>
+            <div className="flex items-center gap-2">
+              {detail?.isActive !== undefined ? (
+                <Badge variant={detail.isActive ? "success" : "muted"}>
+                  {detail.isActive ? "Active" : "Inactive"}
+                </Badge>
+              ) : null}
+              {detail ? (
+                <Button size="sm" variant="outline" onClick={() => onEdit(detail)}>
+                  <Pencil className="h-4 w-4" /> Edit
+                </Button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex rounded-md border bg-muted/30 p-1">
+            {([
+              ["profile", "Profile"],
+              ["address", "Address"],
+              ["notes", "Notes"],
+            ] as Array<[DetailTab, string]>).map(([key, label]) => (
+              <Button
+                key={key}
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => onTabChange(key)}
+                className={["h-8 flex-1 rounded-sm", detailTab === key ? "bg-background shadow-sm" : ""].join(
+                  " ",
+                )}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+
+          {detailLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading details...
+            </div>
+          ) : detailError ? (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {detailError}
+            </div>
+          ) : detail ? (
+            <div className="space-y-2 text-sm">
+              {detailTab === "profile" ? (
+                <>
+                  <DetailRow label="Contact" value={detail.contactPerson || "-"} />
+                  <DetailRow label="Email" value={detail.email || "-"} />
+                  <DetailRow label="Phone" value={detail.phone || "-"} />
+                  <DetailRow label="GSTIN" value={detail.gstin || "-"} />
+                  <DetailRow label="PAN" value={detail.pan || "-"} />
+                </>
+              ) : null}
+              {detailTab === "address" ? (
+                <>
+                  <DetailRow label="Line 1" value={detail.addressLine1 || "-"} />
+                  <DetailRow label="Line 2" value={detail.addressLine2 || "-"} />
+                  <DetailRow label="City" value={detail.city || "-"} />
+                  <DetailRow label="State" value={detail.state || "-"} />
+                  <DetailRow label="Pincode" value={detail.pincode || "-"} />
+                  <DetailRow label="Country" value={detail.country || "-"} />
+                </>
+              ) : null}
+              {detailTab === "notes" ? (
+                <div className="rounded-md border bg-muted/20 p-3 text-sm text-muted-foreground">
+                  {detail.notes?.trim() || "No notes added."}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">No customer selected.</div>
+          )}
+        </div>
+      )}
+    </aside>
+  );
+});
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
@@ -684,7 +779,7 @@ function CustomerFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editing ? "Edit customer" : "New customer"}</DialogTitle>
           <DialogDescription>
@@ -722,22 +817,13 @@ function CustomerFormDialog({
               />
             </FormField>
             <FormField label="Phone" error={errors.phone}>
-              <Input
-                value={form.phone ?? ""}
-                onChange={(e) => update("phone", e.target.value)}
-              />
+              <Input value={form.phone ?? ""} onChange={(e) => update("phone", e.target.value)} />
             </FormField>
             <FormField label="GSTIN" error={errors.gstin}>
-              <Input
-                value={form.gstin ?? ""}
-                onChange={(e) => update("gstin", e.target.value)}
-              />
+              <Input value={form.gstin ?? ""} onChange={(e) => update("gstin", e.target.value)} />
             </FormField>
             <FormField label="PAN" error={errors.pan}>
-              <Input
-                value={form.pan ?? ""}
-                onChange={(e) => update("pan", e.target.value)}
-              />
+              <Input value={form.pan ?? ""} onChange={(e) => update("pan", e.target.value)} />
             </FormField>
             <FormField label="Country" error={errors.country} hint="2-letter ISO code">
               <Input
@@ -777,11 +863,7 @@ function CustomerFormDialog({
               </Select>
             </FormField>
             <FormField label="Notes" className="sm:col-span-2" error={errors.notes}>
-              <Textarea
-                value={form.notes ?? ""}
-                onChange={(e) => update("notes", e.target.value)}
-                rows={3}
-              />
+              <Textarea value={form.notes ?? ""} onChange={(e) => update("notes", e.target.value)} rows={3} />
             </FormField>
           </div>
 

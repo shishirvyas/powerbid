@@ -40,7 +40,15 @@ export function useList<T>(path: string, query: Record<string, string | number> 
     };
   }, [url, tick]);
 
-  return { data, loading, error, refresh: () => setTick((t) => t + 1) };
+  const refresh = React.useCallback(() => setTick((t) => t + 1), []);
+  const mutate = React.useCallback(
+    (updater: (prev: ListEnvelope<T> | null) => ListEnvelope<T> | null) => {
+      setData((prev) => updater(prev));
+    },
+    [],
+  );
+
+  return { data, loading, error, refresh, mutate, setData };
 }
 
 export function useResource<T>(path: string | null) {
