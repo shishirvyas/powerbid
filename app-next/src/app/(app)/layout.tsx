@@ -25,7 +25,7 @@ export default async function AppLayout({
             role: session.role,
           }}
         />
-        <main className="dense-ui flex-1 min-w-0 p-2 sm:p-3 lg:p-3 md:overflow-auto app-scroll-area">
+        <main className="dense-ui flex-1 min-w-0 p-2 sm:p-3 lg:p-3 md:overflow-auto md:[scrollbar-gutter:stable] app-scroll-area overscroll-contain">
           <Suspense fallback={<RouteContentSkeleton />}>
             {children}
           </Suspense>
