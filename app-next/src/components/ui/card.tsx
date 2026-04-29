@@ -6,7 +6,7 @@ export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDi
     <div
       ref={ref}
       className={cn(
-        "rounded-md border border-transparent bg-card text-card-foreground shadow-[0_1px_2px_rgba(15,23,42,0.06)]",
+        "rounded-xl border border-transparent bg-card text-card-foreground shadow-[0_2px_10px_rgba(15,23,42,0.06)] transition-all duration-200 hover:shadow-[0_8px_24px_rgba(15,23,42,0.08)] dark:shadow-[0_8px_24px_rgba(2,6,23,0.28)] dark:hover:shadow-[0_12px_30px_rgba(2,6,23,0.38)]",
         className,
       )}
       {...props}
