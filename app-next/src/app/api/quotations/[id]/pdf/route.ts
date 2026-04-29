@@ -104,21 +104,34 @@ async function loadImageFromCandidates(candidates: string[]) {
   return null;
 }
 
+// Resolve brand asset paths. On Vercel, process.cwd() is /var/task and the
+// outputFileTracingIncludes config causes Next.js to bundle public/brand/**
+// alongside the compiled route at .next/server/app/api/quotations/[id]/pdf/.
+// We therefore also walk up from __dirname to find the files.
+function assetCandidates(relativePath: string): string[] {
+  const cwd = process.cwd();
+  // __dirname in Next.js compiled routes resolves to .next/server/app/api/quotations/[id]/pdf
+  // so walk up 7 levels to reach project root, then into public/brand.
+  const fromDir = path.resolve(__dirname, "../../../../../../..");
+  return [
+    path.join(cwd, relativePath),
+    path.join(cwd, "app-next", relativePath),
+    path.join(fromDir, relativePath),
+    path.join(fromDir, "app-next", relativePath),
+  ];
+}
+
 async function loadLogoAsset() {
   const configured = process.env.QUOTATION_LOGO_PATH || "public/brand/lan-logo.png";
-  const relative = configured.replace(/^[/\\]+/, "");
-  const candidates = path.isAbsolute(configured)
-    ? [configured]
-    : [path.join(process.cwd(), relative), path.join(process.cwd(), "app-next", relative)];
+  const relative = configured.replace(/^[\/\\]+/, "");
+  const candidates = path.isAbsolute(configured) ? [configured] : assetCandidates(relative);
   return loadImageFromCandidates(candidates);
 }
 
 async function loadTemplateAsset() {
   const configured = process.env.QUOTATION_LETTER_TEMPLATE_PATH || "public/brand/Letter-Template.png";
-  const relative = configured.replace(/^[/\\]+/, "");
-  const candidates = path.isAbsolute(configured)
-    ? [configured]
-    : [path.join(process.cwd(), relative), path.join(process.cwd(), "app-next", relative)];
+  const relative = configured.replace(/^[\/\\]+/, "");
+  const candidates = path.isAbsolute(configured) ? [configured] : assetCandidates(relative);
   return loadImageFromCandidates(candidates);
 }
 
