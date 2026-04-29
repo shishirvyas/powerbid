@@ -1,9 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Building2, FileText, Package, Users } from "lucide-react";
+import { Building2, FileText, Package, Pencil, Save, Users } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { QuotationStatusBadge } from "@/components/status-badges";
 import {
   Table,
@@ -27,6 +29,8 @@ type ReportData = {
   };
 };
 
+type ReportSection = "status" | "months" | "customers" | "reliability" | "delivery";
+
 const STAT_ICONS = {
   customers: Users,
   products: Package,
@@ -36,6 +40,10 @@ const STAT_ICONS = {
 
 export function ReportsClient() {
   const { data, loading, error } = useResource<ReportData>("/api/reports");
+  const [selected, setSelected] = React.useState<ReportSection>("status");
+  const [editing, setEditing] = React.useState(false);
+  const [warnThreshold, setWarnThreshold] = React.useState("90");
+  const [dangerThreshold, setDangerThreshold] = React.useState("80");
 
   if (error) {
     return (
@@ -51,25 +59,30 @@ export function ReportsClient() {
   const monthMax = Math.max(1, ...data.byMonth.map((m) => m.total));
   const statusMax = Math.max(1, ...data.byStatus.map((s) => s.total));
 
-  return (
-    <div className="space-y-6 animate-in fade-in-50">
-      <PageHeader
-        title="Reports"
-        description="At-a-glance pipeline, revenue and customer insights."
-      />
+  const sections: Array<{ key: ReportSection; label: string; count?: number }> = [
+    { key: "status", label: "Pipeline by status", count: data.byStatus.length },
+    { key: "months", label: "Monthly trend", count: data.byMonth.length },
+    { key: "customers", label: "Top customers", count: data.topCustomers.length },
+    { key: "reliability", label: "Comm reliability", count: data.communications.byChannel.length },
+    { key: "delivery", label: "Delivery trend", count: data.communications.byDay.length },
+  ];
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  return (
+    <div className="space-y-4 animate-in fade-in-50">
+      <PageHeader title="Reports" description="At-a-glance pipeline, revenue and customer insights." />
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {(Object.keys(data.counts) as (keyof typeof data.counts)[]).map((k) => {
           const Icon = STAT_ICONS[k];
           return (
             <Card key={k}>
-              <CardContent className="flex items-center gap-4 pt-6">
-                <div className="flex h-12 w-12 items-center justify-center rounded-md bg-primary/10 text-primary">
-                  <Icon className="h-6 w-6" />
+              <CardContent className="flex items-center gap-3 p-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Icon className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">{k}</div>
-                  <div className="text-2xl font-semibold">{data.counts[k].toLocaleString("en-IN")}</div>
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{k}</div>
+                  <div className="text-xl font-semibold tabular-nums">{data.counts[k].toLocaleString("en-IN")}</div>
                 </div>
               </CardContent>
             </Card>
@@ -77,106 +90,130 @@ export function ReportsClient() {
         })}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Pipeline by status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data.byStatus.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No quotations yet.</p>
-            ) : (
-              <ul className="space-y-3">
-                {data.byStatus.map((s) => (
-                  <li key={s.status} className="space-y-1">
-                    <div className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-2">
-                        <QuotationStatusBadge status={s.status} />
-                        <span className="text-muted-foreground">{s.count} quote{s.count === 1 ? "" : "s"}</span>
-                      </div>
-                      <span className="tabular-nums font-medium">{formatCurrency(s.total)}</span>
-                    </div>
-                    <div className="h-2 w-full overflow-hidden rounded bg-muted">
-                      <div
-                        className="h-full bg-primary"
-                        style={{ width: `${(s.total / statusMax) * 100}%` }}
-                      />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.55fr)]">
+        <aside className="rounded-xl border bg-card p-3">
+          <div className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Report sections</div>
+          <div className="space-y-1">
+            {sections.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => setSelected(s.key)}
+                className={[
+                  "flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left text-sm transition-colors",
+                  selected === s.key ? "bg-muted" : "hover:bg-muted/50",
+                ].join(" ")}
+              >
+                <span>{s.label}</span>
+                <span className="tabular-nums text-xs text-muted-foreground">{s.count}</span>
+              </button>
+            ))}
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Last 12 months</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data.byMonth.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No history yet.</p>
-            ) : (
-              <div className="flex h-44 items-end gap-2">
-                {data.byMonth.map((m) => (
-                  <div key={m.month} className="flex flex-1 flex-col items-center gap-1">
-                    <div
-                      className="w-full rounded-t bg-primary/80"
-                      style={{ height: `${Math.max(2, (m.total / monthMax) * 100)}%` }}
-                      title={`${formatCurrency(m.total)} · ${m.count} quote(s)`}
-                    />
-                    <div className="text-[10px] text-muted-foreground rotate-45 origin-left whitespace-nowrap">
-                      {m.month}
-                    </div>
-                  </div>
-                ))}
+          <div className="mt-3 rounded-md border p-2.5">
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-xs uppercase tracking-wide text-muted-foreground">Inline alert thresholds</div>
+              {!editing ? (
+                <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+                  <Pencil className="h-4 w-4" /> Edit
+                </Button>
+              ) : (
+                <Button size="sm" variant="outline" onClick={() => setEditing(false)}>
+                  <Save className="h-4 w-4" /> Done
+                </Button>
+              )}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div>
+                <div className="mb-1 text-xs text-muted-foreground">Warn below %</div>
+                {editing ? <Input value={warnThreshold} onChange={(e) => setWarnThreshold(e.target.value)} /> : <div className="text-sm">{warnThreshold}%</div>}
               </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              <div>
+                <div className="mb-1 text-xs text-muted-foreground">Danger below %</div>
+                {editing ? <Input value={dangerThreshold} onChange={(e) => setDangerThreshold(e.target.value)} /> : <div className="text-sm">{dangerThreshold}%</div>}
+              </div>
+            </div>
+          </div>
+        </aside>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Top customers</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {data.topCustomers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No customer revenue yet.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-10">#</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead className="text-right">Quotations</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.topCustomers.map((c, i) => (
-                  <TableRow key={c.id}>
-                    <TableCell className="text-muted-foreground">{i + 1}</TableCell>
-                    <TableCell className="font-medium">{c.name}</TableCell>
-                    <TableCell className="text-right tabular-nums">{c.count}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatCurrency(c.total)}</TableCell>
+        <section className="rounded-xl border bg-card p-3">
+          {selected === "status" ? (
+            <>
+              <div className="mb-2 text-sm font-medium">Pipeline by status</div>
+              {data.byStatus.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No quotations yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {data.byStatus.map((s) => (
+                    <li key={s.status} className="space-y-1 rounded-md bg-muted/20 p-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <QuotationStatusBadge status={s.status} />
+                          <span className="text-muted-foreground">{s.count} quote{s.count === 1 ? "" : "s"}</span>
+                        </div>
+                        <span className="tabular-nums font-medium">{formatCurrency(s.total)}</span>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded bg-muted">
+                        <div className="h-full bg-primary" style={{ width: `${(s.total / statusMax) * 100}%` }} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          ) : null}
+
+          {selected === "months" ? (
+            <>
+              <div className="mb-2 text-sm font-medium">Last 12 months</div>
+              {data.byMonth.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No history yet.</p>
+              ) : (
+                <div className="flex h-40 items-end gap-1.5">
+                  {data.byMonth.map((m) => (
+                    <div key={m.month} className="flex flex-1 flex-col items-center gap-1">
+                      <div
+                        className="w-full rounded-t bg-primary/80"
+                        style={{ height: `${Math.max(2, (m.total / monthMax) * 100)}%` }}
+                        title={`${formatCurrency(m.total)} · ${m.count} quote(s)`}
+                      />
+                      <div className="text-[10px] text-muted-foreground">{m.month.slice(2)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : null}
+
+          {selected === "customers" ? (
+            <>
+              <div className="mb-2 text-sm font-medium">Top customers</div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8">#</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead className="text-right">Quotes</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {data.topCustomers.map((c, i) => (
+                    <TableRow key={c.id}>
+                      <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                      <TableCell className="font-medium">{c.name}</TableCell>
+                      <TableCell className="text-right tabular-nums">{c.count}</TableCell>
+                      <TableCell className="text-right tabular-nums">{formatCurrency(c.total)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </>
+          ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Communication reliability (30 days)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data.communications.byChannel.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No communication attempts yet.</p>
-            ) : (
+          {selected === "reliability" ? (
+            <>
+              <div className="mb-2 text-sm font-medium">Communication reliability</div>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -202,18 +239,12 @@ export function ReportsClient() {
                   })}
                 </TableBody>
               </Table>
-            )}
-          </CardContent>
-        </Card>
+            </>
+          ) : null}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Delivery trend (14 days)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data.communications.byDay.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No delivery trend yet.</p>
-            ) : (
+          {selected === "delivery" ? (
+            <>
+              <div className="mb-2 text-sm font-medium">Delivery trend (14 days)</div>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -232,9 +263,9 @@ export function ReportsClient() {
                   ))}
                 </TableBody>
               </Table>
-            )}
-          </CardContent>
-        </Card>
+            </>
+          ) : null}
+        </section>
       </div>
     </div>
   );

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Eye, FileText, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Check, FileText, Loader2, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, EmptyState } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -125,8 +125,62 @@ export function InquiriesClient() {
 
   const [open, setOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<number | null>(null);
-  const [viewingId, setViewingId] = React.useState<number | null>(null);
   const [confirmDel, setConfirmDel] = React.useState<InquiryRow | null>(null);
+  const [selectedId, setSelectedId] = React.useState<number | null>(null);
+  const [inlineEditId, setInlineEditId] = React.useState<number | null>(null);
+  const [inlineSaving, setInlineSaving] = React.useState(false);
+  const [inlineDraft, setInlineDraft] = React.useState<{ source: FormState["source"]; status: FormState["status"] } | null>(null);
+
+  const rows = data?.rows ?? [];
+  React.useEffect(() => {
+    if (!rows.length) {
+      setSelectedId(null);
+      return;
+    }
+    if (!selectedId || !rows.some((r) => r.id === selectedId)) {
+      setSelectedId(rows[0]?.id ?? null);
+    }
+  }, [rows, selectedId]);
+
+  const saveInline = React.useCallback(
+    async (row: InquiryRow) => {
+      if (!inlineDraft) return;
+      setInlineSaving(true);
+      try {
+        const full = await api<InquiryFull>(`/api/inquiries/${row.id}`);
+        await api(`/api/inquiries/${row.id}`, {
+          method: "PUT",
+          json: {
+            customerId: Number(full.customerId),
+            customerName: full.customerName || null,
+            source: inlineDraft.source,
+            status: inlineDraft.status,
+            dateOfInquiry: full.dateOfInquiry || new Date(full.createdAt).toISOString().slice(0, 10),
+            referenceNumber: full.referenceNumber || null,
+            requirement: full.requirement || null,
+            expectedClosure: full.expectedClosure || null,
+            assignedTo: null,
+            items: full.items.map((it) => ({
+              productId: Number(it.productId),
+              productName: it.productName,
+              unitName: it.unitName || null,
+              qty: Number(it.qty || 0),
+              remarks: it.remarks || null,
+            })),
+          },
+        });
+        toast.success("Inquiry updated");
+        setInlineEditId(null);
+        setInlineDraft(null);
+        refresh();
+      } catch (e) {
+        toast.error(e instanceof ApiClientError ? e.message : "Inline update failed");
+      } finally {
+        setInlineSaving(false);
+      }
+    },
+    [inlineDraft, refresh],
+  );
 
   return (
     <div className="space-y-6 animate-in fade-in-50">
@@ -178,83 +232,142 @@ export function InquiriesClient() {
           }
         />
       ) : (
-        <div className="space-y-3">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Inquiry</TableHead>
-                <TableHead className="hidden md:table-cell">Date</TableHead>
-                <TableHead className="hidden md:table-cell">Reference</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead className="hidden lg:table-cell">Source</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading && !data ? (
-                <TableSkeleton cols={7} rows={6} />
-              ) : (
-                data?.rows.map((r) => (
-                  <TableRow key={r.id} className="transition-colors hover:bg-muted/40">
-                    <TableCell className="font-mono text-xs">{r.inquiryNo}</TableCell>
-                    <TableCell className="hidden md:table-cell text-sm">{formatDate(r.dateOfInquiry || r.createdAt)}</TableCell>
-                    <TableCell className="hidden md:table-cell text-sm">{r.referenceNumber || "-"}</TableCell>
-                    <TableCell className="font-medium">{r.customerName || "—"}</TableCell>
-                    <TableCell className="hidden lg:table-cell text-sm capitalize">{r.source}</TableCell>
-                    <TableCell><InquiryStatusBadge status={r.status} /></TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setViewingId(r.id)}
-                          aria-label="View"
-                          title="View inquiry"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          asChild
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Create quotation"
-                          title="Create quotation from inquiry"
-                        >
-                          <Link href={`/quotations/new?fromInquiry=${r.id}`}>
-                            <FileText className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setEditingId(r.id);
-                            setOpen(true);
-                          }}
-                          aria-label="Edit"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => setConfirmDel(r)} aria-label="Delete">
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-          {data ? (
-            <Pagination
-              total={data.total}
-              limit={limit}
-              offset={offset}
-              onPageChange={setOffset}
-              onLimitChange={setLimit}
-            />
-          ) : null}
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1.3fr)_minmax(22rem,0.9fr)]">
+          <div className="space-y-3">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Inquiry</TableHead>
+                  <TableHead className="hidden md:table-cell">Date</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead className="hidden lg:table-cell">Source</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading && !data ? (
+                  <TableSkeleton cols={6} rows={6} />
+                ) : (
+                  rows.map((r) => {
+                    const isInline = inlineEditId === r.id;
+                    return (
+                      <TableRow
+                        key={r.id}
+                        className={cn("group cursor-pointer", selectedId === r.id && "bg-primary/5")}
+                        onClick={() => setSelectedId(r.id)}
+                      >
+                        <TableCell className="font-mono text-xs">{r.inquiryNo}</TableCell>
+                        <TableCell className="hidden md:table-cell text-sm">{formatDate(r.dateOfInquiry || r.createdAt)}</TableCell>
+                        <TableCell className="font-medium">{r.customerName || "-"}</TableCell>
+                        <TableCell className="hidden lg:table-cell text-sm capitalize">
+                          {isInline ? (
+                            <Select
+                              value={inlineDraft?.source ?? r.source}
+                              onChange={(e) => setInlineDraft((d) => ({ source: e.target.value as FormState["source"], status: d?.status ?? (r.status as FormState["status"]) }))}
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-8"
+                            >
+                              <option value="walkin">Walkin</option>
+                              <option value="phone">Phone</option>
+                              <option value="email">Email</option>
+                              <option value="web">Web</option>
+                              <option value="other">Other</option>
+                            </Select>
+                          ) : (
+                            r.source
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {isInline ? (
+                            <Select
+                              value={inlineDraft?.status ?? r.status}
+                              onChange={(e) => setInlineDraft((d) => ({ source: d?.source ?? (r.source as FormState["source"]), status: e.target.value as FormState["status"] }))}
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-8"
+                            >
+                              <option value="new">New</option>
+                              <option value="in_progress">In progress</option>
+                              <option value="quoted">Quoted</option>
+                              <option value="won">Won</option>
+                              <option value="lost">Lost</option>
+                              <option value="closed">Closed</option>
+                            </Select>
+                          ) : (
+                            <InquiryStatusBadge status={r.status} />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className={cn("flex justify-end gap-1 transition-opacity", isInline ? "opacity-100" : "opacity-0 group-hover:opacity-100")} onClick={(e) => e.stopPropagation()}>
+                            {isInline ? (
+                              <>
+                                <Button variant="ghost" size="icon" onClick={() => saveInline(r)} disabled={inlineSaving}>
+                                  {inlineSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4 text-emerald-600" />}
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => { setInlineEditId(null); setInlineDraft(null); }} disabled={inlineSaving}>
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Button asChild variant="ghost" size="icon" aria-label="Create quotation" title="Create quotation from inquiry">
+                                  <Link href={`/quotations/new?fromInquiry=${r.id}`}>
+                                    <FileText className="h-4 w-4" />
+                                  </Link>
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    setInlineEditId(r.id);
+                                    setInlineDraft({ source: r.source as FormState["source"], status: r.status as FormState["status"] });
+                                  }}
+                                  aria-label="Inline edit"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    setEditingId(r.id);
+                                    setOpen(true);
+                                  }}
+                                  aria-label="Edit"
+                                >
+                                  <Pencil className="h-4 w-4 text-muted-foreground" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => setConfirmDel(r)} aria-label="Delete">
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+            {data ? (
+              <Pagination
+                total={data.total}
+                limit={limit}
+                offset={offset}
+                onPageChange={setOffset}
+                onLimitChange={setLimit}
+              />
+            ) : null}
+          </div>
+
+          <InquiryDetailPanel
+            inquiryId={selectedId}
+            onOpenEdit={(id) => {
+              setEditingId(id);
+              setOpen(true);
+            }}
+          />
         </div>
       )}
 
@@ -268,11 +381,6 @@ export function InquiriesClient() {
           setOpen(false);
           refresh();
         }}
-      />
-
-      <InquiryViewDialog
-        inquiryId={viewingId}
-        onClose={() => setViewingId(null)}
       />
 
       <ConfirmDialog
@@ -657,6 +765,98 @@ function InquiryFormDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function InquiryDetailPanel({
+  inquiryId,
+  onOpenEdit,
+}: {
+  inquiryId: number | null;
+  onOpenEdit: (id: number) => void;
+}) {
+  const { data, loading, error } = useResource<InquiryFull>(inquiryId ? `/api/inquiries/${inquiryId}` : null);
+
+  return (
+    <aside className="rounded-xl border bg-card p-3 md:p-4 xl:sticky xl:top-16 xl:h-fit">
+      {!inquiryId ? (
+        <div className="text-sm text-muted-foreground">Select an inquiry to view details.</div>
+      ) : error ? (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>
+      ) : loading || !data ? (
+        <div className="text-sm text-muted-foreground">Loading...</div>
+      ) : (
+        <div className="space-y-3 text-sm">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <div className="font-mono text-xs text-muted-foreground">{data.inquiryNo}</div>
+              <div className="text-base font-medium">{data.customerName || "Unknown customer"}</div>
+              <div className="text-xs text-muted-foreground">{formatDate(data.dateOfInquiry || data.createdAt)}</div>
+            </div>
+            <InquiryStatusBadge status={data.status} />
+          </div>
+
+          <div className="grid gap-2">
+            <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-2 rounded-md bg-muted/25 px-2 py-1.5">
+              <span className="text-xs uppercase tracking-wide text-muted-foreground">Source</span>
+              <span className="capitalize">{data.source}</span>
+            </div>
+            <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-2 rounded-md bg-muted/25 px-2 py-1.5">
+              <span className="text-xs uppercase tracking-wide text-muted-foreground">Reference</span>
+              <span>{data.referenceNumber || "-"}</span>
+            </div>
+            <div className="grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-2 rounded-md bg-muted/25 px-2 py-1.5">
+              <span className="text-xs uppercase tracking-wide text-muted-foreground">Expected</span>
+              <span>{data.expectedClosure ? formatDate(data.expectedClosure) : "-"}</span>
+            </div>
+          </div>
+
+          {data.requirement ? (
+            <div>
+              <div className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Requirement</div>
+              <div className="whitespace-pre-wrap rounded-md border bg-muted/20 px-2.5 py-2">{data.requirement}</div>
+            </div>
+          ) : null}
+
+          <div>
+            <div className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Items ({data.items.length})</div>
+            {data.items.length === 0 ? (
+              <div className="text-muted-foreground">No line items.</div>
+            ) : (
+              <div className="max-h-56 overflow-auto rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Product</TableHead>
+                      <TableHead className="text-right">Qty</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {data.items.map((it, idx) => (
+                      <TableRow key={it.id ?? idx}>
+                        <TableCell>{it.productName}</TableCell>
+                        <TableCell className="text-right tabular-nums">{it.qty}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" onClick={() => onOpenEdit(data.id)}>
+              <Pencil className="h-4 w-4" /> Edit
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/quotations/new?fromInquiry=${data.id}`}>
+                <FileText className="h-4 w-4" /> Create quotation
+              </Link>
+            </Button>
+          </div>
+        </div>
+      )}
+    </aside>
   );
 }
 
