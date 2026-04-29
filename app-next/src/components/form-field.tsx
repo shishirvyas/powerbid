@@ -49,11 +49,11 @@ export function FormField({
   });
 
   return (
-    <div className={cn("space-y-1.5", className)}>
+    <div className={cn("space-y-1", className)}>
       {label ? (
         <Label
           htmlFor={inputId}
-          className="text-xs uppercase tracking-wide text-muted-foreground"
+          className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
         >
           {label}
           {required ? <RequiredStar /> : null}

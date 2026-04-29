@@ -50,6 +50,16 @@ const navConfig: NavNode[] = [
     children: [
       { label: "Inquiries", href: "/inquiries", icon: Inbox },
       { label: "Quotations", href: "/quotations", icon: FileText },
+      { label: "Sales Orders", href: "/sales-orders", icon: FileText },
+    ],
+  },
+  {
+    type: "group",
+    key: "procurement",
+    label: "Procurement",
+    children: [
+      { label: "Suppliers", href: "/suppliers", icon: Users },
+      { label: "Purchase Orders", href: "/purchase-orders", icon: FileText },
     ],
   },
   {
@@ -59,6 +69,17 @@ const navConfig: NavNode[] = [
     children: [
       { label: "Reports", href: "/reports", icon: BarChart3 },
       { label: "Showcase", href: "/showcase", icon: MonitorPlay },
+    ],
+  },
+  {
+    type: "group",
+    key: "inventory",
+    label: "Inventory",
+    children: [
+      { label: "Warehouses", href: "/warehouses", icon: Package },
+      { label: "Stock Items", href: "/stock-items", icon: Package },
+      { label: "BOM", href: "/boms", icon: FileText },
+      { label: "Production Orders", href: "/production-orders", icon: Settings },
     ],
   },
   {
@@ -82,7 +103,7 @@ const navConfig: NavNode[] = [
 
 function Brand() {
   return (
-    <div className="flex items-center gap-2 px-5 h-16 border-b border-sidebar-border">
+    <div className="flex h-14 items-center gap-2 px-4 border-b border-sidebar-border">
       <BrandLogo compact className="" />
     </div>
   );
@@ -96,7 +117,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   return (
-    <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+    <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5 app-scroll-area">
       {navConfig.map((node) => {
         if (node.type === "item") {
           const active = isActive(node.href);
@@ -105,9 +126,10 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
             <Link
               key={node.href}
               href={node.href}
+              prefetch
               onClick={onNavigate}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] leading-5 transition-colors",
                 active
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
                   : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
@@ -122,17 +144,17 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
         const hasActiveChild = node.children.some((child) => isActive(child.href));
 
         return (
-          <div key={node.key} className="pt-2 first:pt-0">
+          <div key={node.key} className="pt-1 first:pt-0">
             <div
               className={cn(
-                "px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]",
+                "px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em]",
                 hasActiveChild ? "text-sidebar-foreground" : "text-sidebar-foreground/55",
               )}
             >
               {node.label}
             </div>
 
-            <div className="mt-1 space-y-1 pl-3 border-l border-sidebar-border/70 ml-3">
+            <div className="mt-0.5 ml-2.5 space-y-0.5 border-l border-sidebar-border/70 pl-2.5">
               {node.children.map((child) => {
                 const active = isActive(child.href);
                 const Icon = child.icon;
@@ -140,9 +162,10 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
                   <Link
                     key={child.href}
                     href={child.href}
+                    prefetch
                     onClick={onNavigate}
                     className={cn(
-                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+                      "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] leading-5 transition-colors",
                       active
                         ? "bg-sidebar-accent text-sidebar-accent-foreground"
                         : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
@@ -163,10 +186,10 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 
 export function Sidebar() {
   return (
-    <aside className="hidden md:flex md:flex-col w-60 shrink-0 bg-sidebar text-sidebar-foreground border-r border-sidebar-border">
+    <aside className="hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:sticky md:top-0 md:flex md:h-screen md:flex-col">
       <Brand />
       <NavLinks />
-      <div className="px-5 py-3 text-[11px] text-sidebar-foreground/50 border-t border-sidebar-border">
+      <div className="border-t border-sidebar-border px-4 py-2 text-[11px] text-sidebar-foreground/50">
         v0.1 · {new Date().getFullYear()}
       </div>
     </aside>
@@ -203,7 +226,7 @@ export function MobileNav() {
         />
         <DialogPrimitive.Content
           className={cn(
-            "fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col",
+            "fixed inset-y-0 left-0 z-50 flex w-64 max-w-[85vw] flex-col",
             "bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-xl",
             "data-[state=open]:animate-in data-[state=open]:slide-in-from-left",
             "data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left",

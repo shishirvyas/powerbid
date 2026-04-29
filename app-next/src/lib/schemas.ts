@@ -45,6 +45,176 @@ export const customerSchema = z.object({
 });
 export type CustomerInput = z.infer<typeof customerSchema>;
 
+/* ------------------------------ suppliers ------------------------------ */
+export const supplierSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .max(50)
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => (v && v.trim().length > 0 ? v.trim() : null)),
+  companyName: requiredString("Company Name"),
+  gstin: optionalString,
+  pan: optionalString,
+  msmeStatus: optionalString,
+  paymentTerms: optionalString,
+  email: z.string().email().optional().or(z.literal("")).transform((v) => v || null),
+  phone: optionalString,
+  rating: z.coerce.number().min(0).max(5).optional().nullable(),
+  isActive: z.boolean().default(true),
+});
+export type SupplierInput = z.infer<typeof supplierSchema>;
+
+export const supplierContactSchema = z.object({
+  id: z.coerce.number().int().positive().optional(),
+  name: requiredString("Contact Name"),
+  designation: optionalString,
+  email: z.string().email().optional().or(z.literal("")).transform((v) => v || null),
+  phone: optionalString,
+  isPrimary: z.boolean().default(false),
+  isActive: z.boolean().default(true),
+});
+
+export const supplierAddressSchema = z.object({
+  id: z.coerce.number().int().positive().optional(),
+  type: z.enum(["billing", "shipping"]).default("billing"),
+  addressLine1: optionalString,
+  addressLine2: optionalString,
+  city: optionalString,
+  state: optionalString,
+  pincode: optionalString,
+  country: z.string().trim().max(2).default("IN"),
+  isDefault: z.boolean().default(false),
+});
+
+export const supplierBankDetailSchema = z.object({
+  id: z.coerce.number().int().positive().optional(),
+  accountName: requiredString("Account Name", 200),
+  accountNumber: requiredString("Account Number", 80),
+  bankName: requiredString("Bank Name", 200),
+  branchName: optionalString,
+  ifscCode: requiredString("IFSC", 20),
+  swiftCode: optionalString,
+  isPrimary: z.boolean().default(false),
+});
+
+export const supplierProfileSchema = supplierSchema.extend({
+  contacts: z.array(supplierContactSchema).default([]),
+  addresses: z.array(supplierAddressSchema).default([]),
+  bankDetails: z.array(supplierBankDetailSchema).default([]),
+});
+export type SupplierProfileInput = z.infer<typeof supplierProfileSchema>;
+
+/* ------------------------------ purchase orders ------------------------ */
+export const purchaseOrderItemSchema = z.object({
+  productId: z.coerce.number().int().positive().nullable().optional(),
+  productName: requiredString("Product"),
+  unitName: optionalString,
+  qty: z.coerce.number().nonnegative().default(1),
+  unitPrice: z.coerce.number().nonnegative().default(0),
+  discountPercent: z.coerce.number().min(0).max(100).default(0),
+  gstRate: z.coerce.number().min(0).max(100).default(18),
+  gstSlabId: z.coerce.number().int().positive().nullable().optional(),
+});
+
+export const purchaseOrderSchema = z.object({
+  supplierId: z.coerce.number().int().positive(),
+  expectedDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD")
+    .optional()
+    .or(z.literal("")).transform((v) => v || null),
+  status: z
+    .enum(["draft", "pending_approval", "approved", "sent", "partial_received", "closed", "cancelled"])
+    .default("draft"),
+  currency: z.string().trim().min(3).max(3).default("INR"),
+  discountType: z.enum(["percent", "amount"]).default("percent"),
+  discountValue: z.coerce.number().min(0).default(0),
+  freightAmount: z.coerce.number().min(0).default(0),
+  remarks: optionalString,
+  termsConditions: longText,
+  paymentTerms: longText,
+  items: z.array(purchaseOrderItemSchema).min(1, "Add at least one line item"),
+});
+export type PurchaseOrderInput = z.infer<typeof purchaseOrderSchema>;
+export type PurchaseOrderItemInput = z.infer<typeof purchaseOrderItemSchema>;
+
+/* ------------------------------ warehouses ----------------------------- */
+export const warehouseSchema = z.object({
+  code: requiredString("Code", 50),
+  name: requiredString("Name"),
+  location: optionalString,
+  isActive: z.boolean().default(true),
+});
+export type WarehouseInput = z.infer<typeof warehouseSchema>;
+
+export const stockItemSchema = z.object({
+  productId: z.coerce.number().int().positive(),
+  warehouseId: z.coerce.number().int().positive(),
+  binLocation: optionalString,
+  reorderLevel: z.coerce.number().min(0).default(0),
+  // For manual initialization:
+  initialQty: z.coerce.number().min(0).optional(),
+});
+export type StockItemInput = z.infer<typeof stockItemSchema>;
+
+export const stockMovementTxnSchema = z.object({
+  movementType: z.enum(["in", "out", "transfer"]),
+  qty: z.coerce.number().positive(),
+  targetWarehouseId: z.coerce.number().int().positive().optional(),
+  referenceType: optionalString,
+  referenceId: optionalString,
+  remarks: optionalString,
+});
+export type StockMovementTxnInput = z.infer<typeof stockMovementTxnSchema>;
+
+/* ------------------------------ BOM ------------------------------------ */
+export const bomItemSchema = z.object({
+  rawMaterialId: z.coerce.number().int().positive(),
+  rawMaterialName: optionalString,
+  qtyPerUnit: z.coerce.number().positive(),
+  unitName: optionalString,
+  wastagePercent: z.coerce.number().min(0).max(100).default(0),
+  notes: optionalString,
+});
+
+export const bomMasterSchema = z.object({
+  productId: z.coerce.number().int().positive(),
+  bomCode: requiredString("BOM Code", 50),
+  version: requiredString("Version", 20).default("1.0"),
+  isActive: z.boolean().default(true),
+  laborCost: z.coerce.number().min(0).default(0),
+  overheadCost: z.coerce.number().min(0).default(0),
+  notes: optionalString,
+  items: z.array(bomItemSchema).min(1, "Add at least one raw material"),
+});
+export type BomMasterInput = z.infer<typeof bomMasterSchema>;
+export type BomItemInput = z.infer<typeof bomItemSchema>;
+
+/* ------------------------------ production ----------------------------- */
+export const productionOrderSchema = z.object({
+  bomId: z.coerce.number().int().positive().nullable().optional(),
+  productId: z.coerce.number().int().positive(),
+  warehouseId: z.coerce.number().int().positive(),
+  plannedQty: z.coerce.number().positive(),
+  notes: optionalString,
+});
+export type ProductionOrderInput = z.infer<typeof productionOrderSchema>;
+
+export const productionConsumeSchema = z.object({
+  rawMaterialId: z.coerce.number().int().positive(),
+  qty: z.coerce.number().positive(),
+  remarks: optionalString,
+});
+export type ProductionConsumeInput = z.infer<typeof productionConsumeSchema>;
+
+export const productionCompleteSchema = z.object({
+  qtyProduced: z.coerce.number().positive(),
+  remarks: optionalString,
+});
+export type ProductionCompleteInput = z.infer<typeof productionCompleteSchema>;
+
 /* ------------------------------ products ------------------------------- */
 export const productSchema = z.object({
   sku: optionalString,
@@ -141,6 +311,51 @@ export const quotationDispatchSchema = z.object({
   attachPdf: z.boolean().optional().default(true),
 });
 export type QuotationDispatchInput = z.infer<typeof quotationDispatchSchema>;
+
+/* ------------------------------ sales orders --------------------------- */
+export const salesOrderItemSchema = z.object({
+  productId: z.coerce.number().int().positive().nullable().optional(),
+  productName: requiredString("Product"),
+  unitName: optionalString,
+  qty: z.coerce.number().positive().default(1),
+  unitPrice: z.coerce.number().nonnegative().default(0),
+  gstRate: z.coerce.number().min(0).max(100).default(18),
+});
+
+export const salesOrderSchema = z.object({
+  orderDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD")
+    .default(() => new Date().toISOString().slice(0, 10)),
+  quotationId: z.coerce.number().int().positive().nullable().optional(),
+  customerId: z.coerce.number().int().positive(),
+  status: z.enum(["draft", "confirmed", "partially_dispatched", "dispatched", "cancelled"]).default("draft"),
+  notes: optionalString,
+  items: z.array(salesOrderItemSchema).min(1, "Add at least one line item"),
+});
+export type SalesOrderInput = z.infer<typeof salesOrderSchema>;
+export type SalesOrderItemInput = z.infer<typeof salesOrderItemSchema>;
+
+export const salesDispatchSchema = z.object({
+  warehouseId: z.coerce.number().int().positive(),
+  dispatchDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD")
+    .default(() => new Date().toISOString().slice(0, 10)),
+  transporterName: optionalString,
+  vehicleNumber: optionalString,
+  trackingNumber: optionalString,
+  notes: optionalString,
+  items: z
+    .array(
+      z.object({
+        soItemId: z.coerce.number().int().positive(),
+        qty: z.coerce.number().positive(),
+      }),
+    )
+    .min(1, "Add at least one dispatch item"),
+});
+export type SalesDispatchInput = z.infer<typeof salesDispatchSchema>;
 
 export const communicationTemplateSchema = z.object({
   channel: z.enum(["email", "whatsapp"]),

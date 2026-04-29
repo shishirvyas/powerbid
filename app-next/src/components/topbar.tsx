@@ -21,6 +21,23 @@ type User = { name: string; email: string; role: string };
 export function Topbar({ user }: { user: User }) {
   const router = useRouter();
 
+  React.useEffect(() => {
+    const quickLinks = [
+      "/dashboard",
+      "/inquiries",
+      "/quotations",
+      "/sales-orders",
+      "/suppliers",
+      "/purchase-orders",
+      "/stock-items",
+      "/production-orders",
+    ];
+
+    for (const href of quickLinks) {
+      router.prefetch(href);
+    }
+  }, [router]);
+
   async function signOut() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
@@ -35,7 +52,7 @@ export function Topbar({ user }: { user: User }) {
     .toUpperCase();
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-2 sm:gap-4 border-b bg-background/80 backdrop-blur px-4 sm:px-6">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/90 px-3 backdrop-blur sm:gap-3 sm:px-4 lg:px-5">
       <MobileNav />
       <BrandLogo className="block shrink-0 md:hidden" compact />
       <button
@@ -46,24 +63,24 @@ export function Topbar({ user }: { user: User }) {
             new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }),
           );
         }}
-        className="group relative flex-1 min-w-0 max-w-md flex items-center gap-2 rounded-md border border-transparent bg-muted/50 px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:border-border transition-colors"
+        className="group relative flex min-w-0 max-w-sm flex-1 items-center gap-2 rounded-md border border-transparent bg-muted/50 px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:border-border hover:bg-muted"
       >
         <Search className="h-4 w-4 shrink-0" />
         <span className="truncate text-left">Search or jump to...</span>
-        <kbd className="ml-auto hidden sm:inline-flex shrink-0 items-center gap-0.5 rounded border bg-background/60 px-1.5 py-0.5 text-[10px] font-mono">
+        <kbd className="ml-auto hidden shrink-0 items-center gap-0.5 rounded border bg-background/60 px-1.5 py-0.5 font-mono text-[10px] md:inline-flex">
           <span className="text-[11px]">⌘</span>K
         </kbd>
       </button>
-      <div className="ml-auto flex items-center gap-1 sm:gap-2 shrink-0">
+      <div className="ml-auto flex shrink-0 items-center gap-1.5">
         <ThemeToggle />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="gap-2 px-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold">
+            <Button variant="ghost" className="h-9 gap-2 px-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
                 {initials || "U"}
               </span>
               <span className="hidden sm:flex flex-col items-start leading-tight">
-                <span className="text-sm font-medium max-w-[10rem] truncate">{user.name}</span>
+                <span className="max-w-[10rem] truncate text-[13px] font-medium">{user.name}</span>
                 <span className="text-[11px] text-muted-foreground capitalize">
                   {user.role}
                 </span>

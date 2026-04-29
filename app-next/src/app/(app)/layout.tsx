@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { getSession } from "@/lib/auth";
 import { Sidebar } from "@/components/sidebar";
 import { Topbar } from "@/components/topbar";
 import { CommandPalette } from "@/components/command-palette";
+import { RouteContentSkeleton } from "@/components/route-content-skeleton";
 
 export default async function AppLayout({
   children,
@@ -13,9 +15,9 @@ export default async function AppLayout({
   if (!session) redirect("/login");
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="min-h-screen bg-background md:grid md:grid-cols-[14rem_minmax(0,1fr)]">
       <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex min-h-screen min-w-0 flex-col md:h-screen md:overflow-hidden">
         <Topbar
           user={{
             name: session.name,
@@ -23,7 +25,11 @@ export default async function AppLayout({
             role: session.role,
           }}
         />
-        <main className="flex-1 p-4 sm:p-6 md:p-8 min-w-0">{children}</main>
+        <main className="dense-ui flex-1 min-w-0 p-2 sm:p-3 lg:p-3 md:overflow-auto app-scroll-area">
+          <Suspense fallback={<RouteContentSkeleton />}>
+            {children}
+          </Suspense>
+        </main>
       </div>
       <CommandPalette />
     </div>

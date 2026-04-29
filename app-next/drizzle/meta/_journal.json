@@ -1,0 +1,34 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1777485191029,
+      "tag": "0000_tan_old_lace",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1777487714757,
+      "tag": "0001_living_lockjaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777491000000,
+      "tag": "0009_production_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1777492000000,
+      "tag": "0010_sales_and_dispatch",
+      "breakpoints": true
+    }
+  ]
+}

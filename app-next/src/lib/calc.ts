@@ -96,3 +96,115 @@ export function formatDate(d: string | Date | null | undefined): string {
   if (Number.isNaN(date.getTime())) return "—";
   return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
+
+import type { PurchaseOrderItemInput } from "@/lib/schemas";
+
+export type PurchaseOrderCalcLine = PurchaseOrderItemInput & {
+  lineSubtotal: number;
+  lineGst: number;
+  lineTotal: number;
+};
+
+export type PurchaseOrderCalcInput = {
+  items: PurchaseOrderItemInput[];
+  discountType: "percent" | "amount";
+  discountValue: number;
+  freightAmount: number;
+};
+
+export type PurchaseOrderCalcResult = {
+  lines: PurchaseOrderCalcLine[];
+  subtotal: number;
+  discountAmount: number;
+  taxableAmount: number;
+  gstAmount: number;
+  freightAmount: number;
+  grandTotal: number;
+};
+
+export function calcPurchaseOrder(input: PurchaseOrderCalcInput): PurchaseOrderCalcResult {
+  const lines: PurchaseOrderCalcLine[] = input.items.map((it) => {
+    const qty = Number(it.qty) || 0;
+    const price = Number(it.unitPrice) || 0;
+    const rate = Number(it.gstRate) || 0;
+    const itemDiscount = Number(it.discountPercent) || 0;
+    
+    const gross = qty * price;
+    const discountValue = (gross * itemDiscount) / 100;
+    const lineSubtotal = round(gross - discountValue);
+    const lineGst = round((lineSubtotal * rate) / 100);
+    
+    return {
+      ...it,
+      qty,
+      unitPrice: price,
+      discountPercent: itemDiscount,
+      gstRate: rate,
+      lineSubtotal,
+      lineGst,
+      lineTotal: round(lineSubtotal + lineGst),
+    };
+  });
+
+  const subtotal = round(lines.reduce((s, l) => s + l.lineSubtotal, 0));
+  const discountAmount =
+    input.discountType === "percent"
+      ? round((subtotal * (input.discountValue || 0)) / 100)
+      : round(input.discountValue || 0);
+  const taxableAmount = round(subtotal - discountAmount);
+  const ratio = subtotal > 0 ? taxableAmount / subtotal : 1;
+  const gstAmount = round(lines.reduce((s, l) => s + l.lineGst, 0) * ratio);
+  const freight = round(input.freightAmount || 0);
+  const grandTotal = round(taxableAmount + gstAmount + freight);
+
+  return {
+    lines,
+    subtotal,
+    discountAmount,
+    taxableAmount,
+    gstAmount,
+    freightAmount: freight,
+    grandTotal,
+  };
+}
+
+export type BomRollupLine = {
+  rawMaterialId: number;
+  rawMaterialName: string;
+  qtyPerUnit: number;
+  wastagePercent: number;
+  estimatedRate: number;
+  lineCost: number;
+};
+
+export function calcBomRollup(input: {
+  lines: Array<{
+    rawMaterialId: number;
+    rawMaterialName: string;
+    qtyPerUnit: number;
+    wastagePercent: number;
+    estimatedRate: number;
+  }>;
+  laborCost: number;
+  overheadCost: number;
+}) {
+  const lines: BomRollupLine[] = input.lines.map((line) => {
+    const qty = Number(line.qtyPerUnit) || 0;
+    const wastageFactor = 1 + (Number(line.wastagePercent) || 0) / 100;
+    const rate = Number(line.estimatedRate) || 0;
+    const lineCost = round(qty * wastageFactor * rate);
+    return {
+      rawMaterialId: line.rawMaterialId,
+      rawMaterialName: line.rawMaterialName,
+      qtyPerUnit: qty,
+      wastagePercent: Number(line.wastagePercent) || 0,
+      estimatedRate: rate,
+      lineCost,
+    };
+  });
+  const materialCost = round(lines.reduce((sum, line) => sum + line.lineCost, 0));
+  const laborCost = round(Number(input.laborCost) || 0);
+  const overheadCost = round(Number(input.overheadCost) || 0);
+  const totalCostPerUnit = round(materialCost + laborCost + overheadCost);
+  return { lines, materialCost, laborCost, overheadCost, totalCostPerUnit };
+}
