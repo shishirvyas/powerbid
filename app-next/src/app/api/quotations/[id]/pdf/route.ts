@@ -6,6 +6,7 @@ import path from "path";
 import { db } from "@/lib/db";
 import { customers, quotationAttachments, quotationItems, quotations } from "@/lib/db/schema";
 import { ApiError, errorToResponse, parseId, requireSession } from "@/lib/api";
+import { generateQuotationReference } from "@/lib/quotation-reference";
 import {
   DEFAULT_SIGNER_DESIGNATION,
   DEFAULT_SIGNER_MOBILE,
@@ -300,6 +301,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
 
     const [customer] = await db
       .select({
+        code: customers.code,
         name: customers.name,
         addressLine1: customers.addressLine1,
         addressLine2: customers.addressLine2,
@@ -319,7 +321,12 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     const logoImage = await embedImage(pdf, await loadLogoAsset());
     const templateImage = await embedImage(pdf, await loadTemplateAsset());
 
-    const refNo = q.referenceNo || q.quotationNo;
+    const refNo = await generateQuotationReference({
+      customerId: q.customerId,
+      quotationDate: q.quotationDate,
+      quotationId: q.id,
+      currentReferenceNo: q.referenceNo,
+    });
     const dateStr = formatOrdinalDate(q.quotationDate);
 
     const createPage1 = () => {
@@ -354,12 +361,15 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       page1.drawText(line, { x: MARGIN_X, y, size: 9.2, font: fontSans, color: rgb(0.18, 0.22, 0.3) });
       y -= 12;
     }
-    y -= 4;
-
-    const attn = `Kind Attn.: ${q.customerAttention || ""}`;
-    page1.drawText(attn, { x: MARGIN_X, y, size: 9.5, font: fontSansBold });
-    drawUnderline(page1, MARGIN_X, y, fontSansBold.widthOfTextAtSize(attn, 9.5));
-    y -= 18;
+    if (q.customerAttention?.trim()) {
+      y -= 12;
+      const attn = `Kind Attn.: ${q.customerAttention.trim()}`;
+      page1.drawText(attn, { x: MARGIN_X, y, size: 9.5, font: fontSansBold });
+      drawUnderline(page1, MARGIN_X, y, fontSansBold.widthOfTextAtSize(attn, 9.5));
+      y -= 26;
+    } else {
+      y -= 8;
+    }
 
     const subject = `Subject: ${q.subject || "Price Quotation"}${q.projectName ? ` - ${q.projectName}` : ""}`;
     const subjectLines = wrapText(subject, fontSansBold, 10, PW - MARGIN_X * 2);
@@ -404,10 +414,10 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       y -= 12;
     }
 
-    const enclosedY = PAGE_BOTTOM + 54;
-    page1.drawText("Enclosed:", { x: MARGIN_X, y: enclosedY + 20, size: 9.5, font: fontSansBold });
-    page1.drawText("1) Price Schedule", { x: MARGIN_X + 8, y: enclosedY + 8, size: 9, font: fontSans });
-    page1.drawText("2) Commercial Terms & Conditions", { x: MARGIN_X + 8, y: enclosedY - 4, size: 9, font: fontSans });
+    const enclosedY = Math.max(PAGE_BOTTOM + 30, y - 6);
+    page1.drawText("Enclosed:", { x: MARGIN_X, y: enclosedY, size: 9.5, font: fontSansBold });
+    page1.drawText("1) Price Schedule", { x: MARGIN_X + 8, y: enclosedY - 12, size: 9, font: fontSans });
+    page1.drawText("2) Commercial Terms & Conditions", { x: MARGIN_X + 8, y: enclosedY - 24, size: 9, font: fontSans });
 
     // PAGE 2+ (schedule + terms with dynamic pagination)
     let page = createStandardPage();

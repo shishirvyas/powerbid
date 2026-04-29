@@ -10,6 +10,7 @@ import {
   parseSearch,
   requireSession,
 } from "@/lib/api";
+import { generateQuotationReference } from "@/lib/quotation-reference";
 import { quotationListQuerySchema, quotationSchema } from "@/lib/schemas";
 import { calcQuotation } from "@/lib/calc";
 
@@ -110,11 +111,16 @@ export async function POST(req: NextRequest) {
       freightAmount: 0,
     });
     const quotationNo = await nextQuotationNo();
+    const referenceNo = await generateQuotationReference({
+      customerId: data.customerId,
+      quotationDate: data.quotationDate,
+      currentReferenceNo: data.referenceNo ?? null,
+    });
     const [row] = await db
       .insert(quotations)
       .values({
         quotationNo,
-        referenceNo: data.referenceNo ?? quotationNo,
+        referenceNo,
         quotationDate: data.quotationDate,
         subject: data.subject ?? null,
         projectName: data.projectName ?? null,

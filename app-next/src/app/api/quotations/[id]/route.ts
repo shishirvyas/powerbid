@@ -15,6 +15,7 @@ import {
   parseJson,
   requireSession,
 } from "@/lib/api";
+import { generateQuotationReference } from "@/lib/quotation-reference";
 import { quotationSchema } from "@/lib/schemas";
 import { calcQuotation } from "@/lib/calc";
 
@@ -118,16 +119,27 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
     const session = await requireSession();
     const id = parseId((await ctx.params).id);
     const data = await parseJson(req, quotationSchema);
+    const [existing] = await db
+      .select({ id: quotations.id, referenceNo: quotations.referenceNo })
+      .from(quotations)
+      .where(eq(quotations.id, id));
+    if (!existing) throw new ApiError(404, "Quotation not found");
     const calc = calcQuotation({
       items: data.items,
       discountType: "percent",
       discountValue: 0,
       freightAmount: 0,
     });
+    const referenceNo = await generateQuotationReference({
+      customerId: data.customerId,
+      quotationDate: data.quotationDate,
+      quotationId: id,
+      currentReferenceNo: existing.referenceNo,
+    });
     const [row] = await db
       .update(quotations)
       .set({
-        referenceNo: data.referenceNo ?? null,
+        referenceNo,
         quotationDate: data.quotationDate,
         subject: data.subject ?? null,
         projectName: data.projectName ?? null,
@@ -163,7 +175,6 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
       })
       .where(eq(quotations.id, id))
       .returning();
-    if (!row) throw new ApiError(404, "Quotation not found");
     await db.delete(quotationItems).where(eq(quotationItems.quotationId, id));
     await db.insert(quotationItems).values(
       calc.lines.map((l, i) => ({
