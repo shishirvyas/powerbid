@@ -46,7 +46,7 @@ const navConfig: NavNode[] = [
   {
     type: "group",
     key: "transactions",
-    label: "Transactions",
+    label: "Order Management",
     children: [
       { label: "Inquiries", href: "/inquiries", icon: Inbox },
       { label: "Quotations", href: "/quotations", icon: FileText },
