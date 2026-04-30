@@ -13,7 +13,7 @@ import { Select } from "@/components/ui/select";
 import { Typeahead, type TypeaheadOption } from "@/components/typeahead";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RichTextEditor } from "@/components/rich-text-editor";
-import { useList, useResource } from "@/lib/hooks";
+import { useDebounced, useList, useResource } from "@/lib/hooks";
 import { api, ApiClientError } from "@/lib/api-client";
 import { calcPurchaseOrder, formatCurrency } from "@/lib/calc";
 import { cn } from "@/lib/utils";
@@ -71,6 +71,7 @@ type BuilderItem = {
   unitPrice: string;
   discountPercent: string;
   gstSlabId: string;
+  gstSlabQuery?: string;
   gstRate: string;
 };
 
@@ -97,6 +98,7 @@ export const blankInitial: POBuilderInitial = {
       unitPrice: "0",
       discountPercent: "0",
       gstSlabId: "",
+      gstSlabQuery: "",
       gstRate: "0",
     },
   ],
@@ -128,12 +130,15 @@ export function PurchaseOrderBuilder({ initial, mode }: { initial: POBuilderInit
   const router = useRouter();
   const [form, setForm] = React.useState<POBuilderInitial>(initial);
   const [supplierQuery, setSupplierQuery] = React.useState("");
+  const [productLookupQuery, setProductLookupQuery] = React.useState("");
+  const supplierLookupQ = useDebounced(supplierQuery, 250);
+  const productLookupQ = useDebounced(productLookupQuery, 250);
   const [saving, setSaving] = React.useState(false);
   const { errors, set: setErrors, setOne } = useFieldErrors();
   const [itemErrors, setItemErrors] = React.useState<Record<number, Record<string, string>>>({});
 
-  const { data: suppliers } = useList<SupplierOption>("/api/suppliers", { limit: 200 });
-  const { data: products } = useList<ProductOption>("/api/products", { limit: 200 });
+  const { data: suppliers } = useList<SupplierOption>("/api/suppliers", { q: supplierLookupQ, limit: 100 });
+  const { data: products } = useList<ProductOption>("/api/products", { q: productLookupQ, limit: 100 });
   const { data: masters } = useResource<{ gstSlabs: GstSlabOption[] }>("/api/masters");
 
   React.useEffect(() => {
@@ -351,7 +356,10 @@ export function PurchaseOrderBuilder({ initial, mode }: { initial: POBuilderInit
                   <Typeahead
                     value={it.productId}
                     inputValue={it.productQuery}
-                    onInputValueChange={(v) => updateItem(idx, "productQuery", v)}
+                    onInputValueChange={(v) => {
+                      setProductLookupQuery(v);
+                      updateItem(idx, "productQuery", v);
+                    }}
                     onSelect={(opt) => selectProduct(idx, opt)}
                     options={(products?.rows ?? []).map(p => ({
                       value: String(p.id),
@@ -374,19 +382,34 @@ export function PurchaseOrderBuilder({ initial, mode }: { initial: POBuilderInit
                 </div>
                 <div className="lg:col-span-2">
                   <Label className="text-[10px] uppercase text-muted-foreground">GST slab</Label>
-                  <Select
+                  <Typeahead
                     value={it.gstSlabId}
-                    onChange={(e) => {
-                      const slab = masters?.gstSlabs.find(g => String(g.id) === e.target.value);
-                      updateItem(idx, "gstSlabId", e.target.value);
-                      updateItem(idx, "gstRate", slab ? String(slab.rate) : "0");
+                    inputValue={it.gstSlabQuery || ""}
+                    onInputValueChange={(v) => {
+                      setForm((f) => {
+                        const items = [...f.items];
+                        items[idx] = { ...items[idx], gstSlabId: "", gstRate: "0", gstSlabQuery: v };
+                        return { ...f, items };
+                      });
                     }}
-                  >
-                    <option value="">— Slab —</option>
-                    {(masters?.gstSlabs ?? []).filter(g => g.isActive).map(g => (
-                      <option key={g.id} value={g.id}>{g.name} ({g.rate}%)</option>
-                    ))}
-                  </Select>
+                    onSelect={(opt) => {
+                      const slab = masters?.gstSlabs.find((g) => String(g.id) === opt.value);
+                      setForm((f) => {
+                        const items = [...f.items];
+                        items[idx] = {
+                          ...items[idx],
+                          gstSlabId: opt.value,
+                          gstRate: slab ? String(slab.rate) : "0",
+                          gstSlabQuery: opt.label,
+                        };
+                        return { ...f, items };
+                      });
+                    }}
+                    options={(masters?.gstSlabs ?? [])
+                      .filter((g) => g.isActive)
+                      .map((g) => ({ value: String(g.id), label: `${g.name} (${g.rate}%)` }))}
+                    placeholder="Search GST slab..."
+                  />
                 </div>
                 <div className="lg:col-span-2 flex items-end justify-between gap-2">
                   <div className="text-right text-sm tabular-nums">

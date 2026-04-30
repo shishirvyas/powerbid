@@ -233,6 +233,7 @@ function StockMovementDialog({
     referenceId: "",
     remarks: "",
   });
+  const [targetWarehouseQuery, setTargetWarehouseQuery] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const { data: warehouses } = useList<{ id: number; code: string; name: string }>("/api/warehouses", { limit: 100 });
   const { data: recentMovements } = useResource<MovementRow[]>(item ? `/api/stock-items/${item.id}/movements` : null);
@@ -247,6 +248,7 @@ function StockMovementDialog({
       referenceId: "",
       remarks: "",
     });
+    setTargetWarehouseQuery("");
   }, [open, item]);
 
   async function submitMovement(e: React.FormEvent) {
@@ -303,20 +305,22 @@ function StockMovementDialog({
 
           {form.movementType === "transfer" ? (
             <FormField label="Target Warehouse" required>
-              <select
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              <Typeahead
                 value={form.targetWarehouseId}
-                onChange={(e) => setForm((f) => ({ ...f, targetWarehouseId: e.target.value }))}
-              >
-                <option value="">Select warehouse</option>
-                {(warehouses?.rows || [])
+                inputValue={targetWarehouseQuery}
+                onInputValueChange={(v) => {
+                  setTargetWarehouseQuery(v);
+                  setForm((f) => ({ ...f, targetWarehouseId: "" }));
+                }}
+                onSelect={(opt) => {
+                  setForm((f) => ({ ...f, targetWarehouseId: opt.value }));
+                  setTargetWarehouseQuery(opt.label);
+                }}
+                options={(warehouses?.rows || [])
                   .filter((w) => w.id !== item?.warehouseId)
-                  .map((w) => (
-                    <option key={w.id} value={String(w.id)}>
-                      {w.code} - {w.name}
-                    </option>
-                  ))}
-              </select>
+                  .map((w) => ({ value: String(w.id), label: `${w.code} - ${w.name}` }))}
+                placeholder="Search warehouse..."
+              />
             </FormField>
           ) : null}
 

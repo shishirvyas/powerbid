@@ -14,7 +14,7 @@ import { Select } from "@/components/ui/select";
 import { Typeahead, type TypeaheadOption } from "@/components/typeahead";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RichTextEditor } from "@/components/rich-text-editor";
-import { useList, useResource } from "@/lib/hooks";
+import { useDebounced, useList, useResource } from "@/lib/hooks";
 import { api, ApiClientError } from "@/lib/api-client";
 import { calcQuotation, formatCurrency } from "@/lib/calc";
 import { SIGNATURE_PRESETS } from "@/lib/branding";
@@ -110,6 +110,7 @@ type BuilderItem = {
   qty: string;
   unitPrice: string;
   gstSlabId: string;
+  gstSlabQuery?: string;
   gstRate: string;
 };
 
@@ -151,6 +152,7 @@ export const blankInitial: QuotationBuilderInitial = {
       qty: "1",
       unitPrice: "0",
       gstSlabId: "",
+      gstSlabQuery: "",
       gstRate: "0",
     },
   ],
@@ -181,13 +183,17 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
   const router = useRouter();
   const [form, setForm] = React.useState<QuotationBuilderInitial>(initial);
   const [customerQuery, setCustomerQuery] = React.useState("");
+  const [productLookupQuery, setProductLookupQuery] = React.useState("");
+  const customerLookupQ = useDebounced(customerQuery, 250);
+  const productLookupQ = useDebounced(productLookupQuery, 250);
+  const [subjectTemplateQuery, setSubjectTemplateQuery] = React.useState("");
   const [pendingAttachments, setPendingAttachments] = React.useState<File[]>([]);
   const [saving, setSaving] = React.useState(false);
   const { errors, set: setErrors, setOne } = useFieldErrors();
   const [itemErrors, setItemErrors] = React.useState<Record<number, Record<string, string>>>({});
 
-  const { data: customers } = useList<CustomerOption>("/api/customers", { limit: 200 });
-  const { data: products } = useList<ProductOption>("/api/products", { limit: 200 });
+  const { data: customers } = useList<CustomerOption>("/api/customers", { q: customerLookupQ, limit: 100 });
+  const { data: products } = useList<ProductOption>("/api/products", { q: productLookupQ, limit: 100 });
   const { data: masters } = useResource<{ gstSlabs: GstSlabOption[] }>("/api/masters");
   const { data: subjectTemplates } = useList<SubjectTemplateOption>("/api/masters/subject-templates", { limit: 200 });
 
@@ -207,7 +213,14 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
       subject: def.subjectText || f.subject,
       introText: def.introParagraph || f.introText,
     }));
+    setSubjectTemplateQuery(def.name);
   }, [subjectTemplates, form.subjectTemplateId, mode]);
+
+  React.useEffect(() => {
+    if (!subjectTemplates?.rows || !form.subjectTemplateId) return;
+    const selected = subjectTemplates.rows.find((t) => t.id === form.subjectTemplateId);
+    if (selected) setSubjectTemplateQuery(selected.name);
+  }, [subjectTemplates, form.subjectTemplateId]);
 
   const calc = React.useMemo(() => {
     return calcQuotation({
@@ -291,6 +304,7 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
     const id = templateId ? Number(templateId) : null;
     if (!id || !subjectTemplates?.rows) {
       setForm((f) => ({ ...f, subjectTemplateId: null }));
+      setSubjectTemplateQuery("");
       return;
     }
     const selected = subjectTemplates.rows.find((t) => t.id === id);
@@ -301,6 +315,7 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
       subject: selected.subjectText || f.subject,
       introText: selected.introParagraph || f.introText,
     }));
+    setSubjectTemplateQuery(selected.name);
   }
 
   function addItem() {
@@ -316,6 +331,7 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
           qty: "1",
           unitPrice: "0",
           gstSlabId: "",
+          gstSlabQuery: "",
           gstRate: "0",
         },
       ],
@@ -573,17 +589,19 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
             />
           </Field>
           <Field label="Subject template" error={errors.subjectTemplateId}>
-            <Select
+            <Typeahead
               value={form.subjectTemplateId ? String(form.subjectTemplateId) : ""}
-              onChange={(e) => onSelectTemplate(e.target.value)}
-            >
-              <option value="">— Select template —</option>
-              {subjectTemplates?.rows.filter((t) => t.isActive).map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}{t.isDefault ? " (Default)" : ""}
-                </option>
-              ))}
-            </Select>
+              inputValue={subjectTemplateQuery}
+              onInputValueChange={(v) => {
+                setSubjectTemplateQuery(v);
+                setForm((f) => ({ ...f, subjectTemplateId: null }));
+              }}
+              onSelect={(opt) => onSelectTemplate(opt.value)}
+              options={(subjectTemplates?.rows || [])
+                .filter((t) => t.isActive)
+                .map((t) => ({ value: String(t.id), label: `${t.name}${t.isDefault ? " (Default)" : ""}` }))}
+              placeholder="Search subject template..."
+            />
             <p className="text-xs text-muted-foreground">Default template is auto-applied, you can change it here.</p>
           </Field>
           <Field label="Subject" className="lg:col-span-2" error={errors.subject}>
@@ -650,7 +668,10 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
                   <Typeahead
                     value={it.productId}
                     inputValue={it.productQuery}
-                    onInputValueChange={(value) => updateItem(idx, "productQuery", value)}
+                    onInputValueChange={(value) => {
+                      setProductLookupQuery(value);
+                      updateItem(idx, "productQuery", value);
+                    }}
                     onSelect={(option) => selectProduct(idx, option)}
                     options={(products?.rows ?? []).map((p) => ({
                       value: String(p.id),
@@ -692,26 +713,30 @@ export function QuotationBuilder({ initial, mode }: { initial: QuotationBuilderI
                 </div>
                 <div className="lg:col-span-2">
                   <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">GST slab</Label>
-                  <Select
+                  <Typeahead
                     value={it.gstSlabId}
-                    onChange={(e) => {
-                      const slabId = e.target.value;
-                      const slab = masters?.gstSlabs.find((g) => String(g.id) === slabId);
+                    inputValue={it.gstSlabQuery || ""}
+                    onInputValueChange={(v) => {
                       setForm((f) => {
                         const items = [...f.items];
-                        const nextRate = slab ? String(parseFloat(String(slab.rate))) : "0";
-                        items[idx] = { ...items[idx], gstSlabId: slabId, gstRate: nextRate };
+                        items[idx] = { ...items[idx], gstSlabId: "", gstRate: "0", gstSlabQuery: v };
                         return { ...f, items };
                       });
                     }}
-                  >
-                    <option value="">— Select GST slab —</option>
-                    {(masters?.gstSlabs ?? []).filter((g) => g.isActive).map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.name} ({g.rate}%)
-                      </option>
-                    ))}
-                  </Select>
+                    onSelect={(opt) => {
+                      const slab = masters?.gstSlabs.find((g) => String(g.id) === opt.value);
+                      setForm((f) => {
+                        const items = [...f.items];
+                        const nextRate = slab ? String(parseFloat(String(slab.rate))) : "0";
+                        items[idx] = { ...items[idx], gstSlabId: opt.value, gstRate: nextRate, gstSlabQuery: opt.label };
+                        return { ...f, items };
+                      });
+                    }}
+                    options={(masters?.gstSlabs ?? [])
+                      .filter((g) => g.isActive)
+                      .map((g) => ({ value: String(g.id), label: `${g.name} (${g.rate}%)` }))}
+                    placeholder="Search GST slab..."
+                  />
                 </div>
                 <div className="lg:col-span-1 flex items-end justify-between gap-2">
                   <div className="text-right text-sm tabular-nums">

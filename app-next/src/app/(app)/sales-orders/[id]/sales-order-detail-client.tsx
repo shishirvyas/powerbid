@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Typeahead } from "@/components/typeahead";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api, ApiClientError } from "@/lib/api-client";
 import { formatCurrency, formatDate } from "@/lib/calc";
@@ -57,6 +58,7 @@ export default function SalesOrderDetailClient({ id }: { id: string }) {
   const { data: warehouses } = useList<Warehouse>("/api/warehouses", { limit: 100 });
 
   const [dispatching, setDispatching] = React.useState(false);
+  const [warehouseQuery, setWarehouseQuery] = React.useState("");
   const [dispatchForm, setDispatchForm] = React.useState({
     warehouseId: "",
     dispatchDate: new Date().toISOString().slice(0, 10),
@@ -191,10 +193,20 @@ export default function SalesOrderDetailClient({ id }: { id: string }) {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <Input type="date" value={dispatchForm.dispatchDate} onChange={(e) => setDispatchForm((f) => ({ ...f, dispatchDate: e.target.value }))} />
-            <select className="h-10 rounded-md border border-input bg-background px-3 text-sm" value={dispatchForm.warehouseId} onChange={(e) => setDispatchForm((f) => ({ ...f, warehouseId: e.target.value }))}>
-              <option value="">Select warehouse</option>
-              {(warehouses?.rows || []).map((w) => <option key={w.id} value={w.id}>{w.code} - {w.name}</option>)}
-            </select>
+            <Typeahead
+              value={dispatchForm.warehouseId}
+              inputValue={warehouseQuery}
+              onInputValueChange={(v) => {
+                setWarehouseQuery(v);
+                setDispatchForm((f) => ({ ...f, warehouseId: "" }));
+              }}
+              onSelect={(opt) => {
+                setDispatchForm((f) => ({ ...f, warehouseId: opt.value }));
+                setWarehouseQuery(opt.label);
+              }}
+              options={(warehouses?.rows || []).map((w) => ({ value: String(w.id), label: `${w.code} - ${w.name}` }))}
+              placeholder="Search warehouse..."
+            />
             <Input placeholder="Transporter" value={dispatchForm.transporterName} onChange={(e) => setDispatchForm((f) => ({ ...f, transporterName: e.target.value }))} />
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">

@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { FormField } from "@/components/form-field";
+import { Typeahead } from "@/components/typeahead";
 import { Pagination } from "@/components/pagination";
 import { TableSkeleton } from "@/components/table-skeleton";
 import { useDebounced, useList } from "@/lib/hooks";
@@ -49,6 +50,7 @@ type ProductOption = { id: number; sku: string | null; name: string };
 
 type BomItemForm = {
   rawMaterialId: string;
+  rawMaterialQuery: string;
   qtyPerUnit: string;
   wastagePercent: string;
   notes: string;
@@ -73,7 +75,7 @@ const emptyForm: BomForm = {
   laborCost: "0",
   overheadCost: "0",
   notes: "",
-  items: [{ rawMaterialId: "", qtyPerUnit: "1", wastagePercent: "0", notes: "" }],
+  items: [{ rawMaterialId: "", rawMaterialQuery: "", qtyPerUnit: "1", wastagePercent: "0", notes: "" }],
 };
 
 export function BomsClient() {
@@ -87,8 +89,11 @@ export function BomsClient() {
   const [editingId, setEditingId] = React.useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = React.useState<BomRow | null>(null);
   const [form, setForm] = React.useState<BomForm>(emptyForm);
+  const [productQuery, setProductQuery] = React.useState("");
+  const [productLookupQuery, setProductLookupQuery] = React.useState("");
+  const productLookupQ = useDebounced(productLookupQuery, 250);
   const [saving, setSaving] = React.useState(false);
-  const { data: products } = useList<ProductOption>("/api/products", { limit: 300 });
+  const { data: products } = useList<ProductOption>("/api/products", { q: productLookupQ, limit: 100 });
 
   React.useEffect(() => {
     setOffset(0);
@@ -97,6 +102,7 @@ export function BomsClient() {
   function openCreate() {
     setEditingId(null);
     setForm(emptyForm);
+    setProductQuery("");
     setDialogOpen(true);
   }
 
@@ -114,11 +120,13 @@ export function BomsClient() {
         notes: detail.notes || "",
         items: (detail.items || []).map((it: any) => ({
           rawMaterialId: String(it.rawMaterialId),
+          rawMaterialQuery: it.rawMaterialName || "",
           qtyPerUnit: String(it.qtyPerUnit),
           wastagePercent: String(it.wastagePercent),
           notes: it.notes || "",
         })),
       });
+      setProductQuery(`${detail.productSku || "NO-SKU"} - ${detail.productName}`);
       setDialogOpen(true);
     } catch (err) {
       toast.error(err instanceof ApiClientError ? err.message : "Failed to load BOM");
@@ -279,16 +287,21 @@ export function BomsClient() {
           <form onSubmit={submitBom} className="space-y-4">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <FormField label="Product" required>
-                <select
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                <Typeahead
                   value={form.productId}
-                  onChange={(e) => setForm((f) => ({ ...f, productId: e.target.value }))}
-                >
-                  <option value="">Select product</option>
-                  {(products?.rows || []).map((p) => (
-                    <option key={p.id} value={p.id}>{p.sku || "NO-SKU"} - {p.name}</option>
-                  ))}
-                </select>
+                  inputValue={productQuery}
+                  onInputValueChange={(v) => {
+                    setProductLookupQuery(v);
+                    setProductQuery(v);
+                    setForm((f) => ({ ...f, productId: "" }));
+                  }}
+                  onSelect={(opt) => {
+                    setForm((f) => ({ ...f, productId: opt.value }));
+                    setProductQuery(opt.label);
+                  }}
+                  options={(products?.rows || []).map((p) => ({ value: String(p.id), label: `${p.sku || "NO-SKU"} - ${p.name}` }))}
+                  placeholder="Search product..."
+                />
               </FormField>
               <FormField label="BOM Code" required>
                 <Input value={form.bomCode} onChange={(e) => setForm((f) => ({ ...f, bomCode: e.target.value }))} placeholder="e.g. BOM-ASSY-001" />
@@ -321,7 +334,7 @@ export function BomsClient() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setForm((f) => ({ ...f, items: [...f.items, { rawMaterialId: "", qtyPerUnit: "1", wastagePercent: "0", notes: "" }] }))}
+                  onClick={() => setForm((f) => ({ ...f, items: [...f.items, { rawMaterialId: "", rawMaterialQuery: "", qtyPerUnit: "1", wastagePercent: "0", notes: "" }] }))}
                 >
                   <Plus className="h-4 w-4" /> Add Item
                 </Button>
@@ -330,22 +343,27 @@ export function BomsClient() {
               {form.items.map((it, idx) => (
                 <div key={idx} className="grid grid-cols-1 gap-2 rounded-md border bg-muted/30 p-2 md:grid-cols-12">
                   <div className="md:col-span-5">
-                    <select
-                      className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    <Typeahead
                       value={it.rawMaterialId}
-                      onChange={(e) =>
+                      inputValue={it.rawMaterialQuery}
+                      onInputValueChange={(v) => {
+                        setProductLookupQuery(v);
                         setForm((f) => {
                           const items = [...f.items];
-                          items[idx] = { ...items[idx], rawMaterialId: e.target.value };
+                          items[idx] = { ...items[idx], rawMaterialId: "", rawMaterialQuery: v };
+                          return { ...f, items };
+                        });
+                      }}
+                      onSelect={(opt) =>
+                        setForm((f) => {
+                          const items = [...f.items];
+                          items[idx] = { ...items[idx], rawMaterialId: opt.value, rawMaterialQuery: opt.label };
                           return { ...f, items };
                         })
                       }
-                    >
-                      <option value="">Select material</option>
-                      {(products?.rows || []).map((p) => (
-                        <option key={p.id} value={p.id}>{p.sku || "NO-SKU"} - {p.name}</option>
-                      ))}
-                    </select>
+                      options={(products?.rows || []).map((p) => ({ value: String(p.id), label: `${p.sku || "NO-SKU"} - ${p.name}` }))}
+                      placeholder="Search material..."
+                    />
                   </div>
                   <div className="md:col-span-2">
                     <Input

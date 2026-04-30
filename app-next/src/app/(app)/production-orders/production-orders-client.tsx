@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FormField } from "@/components/form-field";
+import { Typeahead } from "@/components/typeahead";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Pagination } from "@/components/pagination";
 import { TableSkeleton } from "@/components/table-skeleton";
@@ -58,13 +59,16 @@ export function ProductionOrdersClient() {
   const [offset, setOffset] = React.useState(0);
   const { data, loading, error, refresh } = useList<Row>("/api/production-orders", { q, limit, offset });
 
-  const { data: products } = useList<Product>("/api/products", { limit: 300 });
-  const { data: warehouses } = useList<Warehouse>("/api/warehouses", { limit: 100 });
-  const { data: boms } = useList<Bom>("/api/boms", { limit: 300 });
-
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState<Row | null>(null);
+  const [productQuery, setProductQuery] = React.useState("");
+  const productLookupQ = useDebounced(productQuery, 250);
+  const { data: products } = useList<Product>("/api/products", { q: productLookupQ, limit: 100 });
+  const { data: warehouses } = useList<Warehouse>("/api/warehouses", { limit: 100 });
+  const { data: boms } = useList<Bom>("/api/boms", { limit: 300 });
+  const [bomQuery, setBomQuery] = React.useState("");
+  const [warehouseQuery, setWarehouseQuery] = React.useState("");
   const [form, setForm] = React.useState({
     productId: "",
     warehouseId: "",
@@ -97,6 +101,9 @@ export function ProductionOrdersClient() {
       });
       toast.success("Production order created");
       setDialogOpen(false);
+      setProductQuery("");
+      setBomQuery("");
+      setWarehouseQuery("");
       setForm({ productId: "", warehouseId: "", bomId: "", plannedQty: "1", notes: "" });
       refresh();
       router.push(`/production-orders/${row.id}`);
@@ -180,22 +187,54 @@ export function ProductionOrdersClient() {
           </DialogHeader>
           <form onSubmit={createOrder} className="space-y-4">
             <FormField label="Product" required>
-              <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.productId} onChange={(e) => setForm((f) => ({ ...f, productId: e.target.value, bomId: "" }))}>
-                <option value="">Select product</option>
-                {(products?.rows || []).map((p) => <option key={p.id} value={p.id}>{p.sku || "NO-SKU"} - {p.name}</option>)}
-              </select>
+              <Typeahead
+                value={form.productId}
+                inputValue={productQuery}
+                onInputValueChange={(v) => {
+                  setProductQuery(v);
+                  setBomQuery("");
+                  setForm((f) => ({ ...f, productId: "", bomId: "" }));
+                }}
+                onSelect={(opt) => {
+                  setProductQuery(opt.label);
+                  setBomQuery("");
+                  setForm((f) => ({ ...f, productId: opt.value, bomId: "" }));
+                }}
+                options={(products?.rows || []).map((p) => ({ value: String(p.id), label: `${p.sku || "NO-SKU"} - ${p.name}` }))}
+                placeholder="Search product..."
+              />
             </FormField>
             <FormField label="BOM Revision">
-              <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.bomId} onChange={(e) => setForm((f) => ({ ...f, bomId: e.target.value }))}>
-                <option value="">Without BOM (manual)</option>
-                {bomOptions.map((b) => <option key={b.id} value={b.id}>{b.bomCode} - {b.productName}</option>)}
-              </select>
+              <Typeahead
+                value={form.bomId}
+                inputValue={bomQuery}
+                onInputValueChange={(v) => {
+                  setBomQuery(v);
+                  setForm((f) => ({ ...f, bomId: "" }));
+                }}
+                onSelect={(opt) => {
+                  setForm((f) => ({ ...f, bomId: opt.value }));
+                  setBomQuery(opt.label);
+                }}
+                options={bomOptions.map((b) => ({ value: String(b.id), label: `${b.bomCode} - ${b.productName}` }))}
+                placeholder="Search BOM revision..."
+              />
             </FormField>
             <FormField label="Warehouse" required>
-              <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.warehouseId} onChange={(e) => setForm((f) => ({ ...f, warehouseId: e.target.value }))}>
-                <option value="">Select warehouse</option>
-                {(warehouses?.rows || []).map((w) => <option key={w.id} value={w.id}>{w.code} - {w.name}</option>)}
-              </select>
+              <Typeahead
+                value={form.warehouseId}
+                inputValue={warehouseQuery}
+                onInputValueChange={(v) => {
+                  setWarehouseQuery(v);
+                  setForm((f) => ({ ...f, warehouseId: "" }));
+                }}
+                onSelect={(opt) => {
+                  setForm((f) => ({ ...f, warehouseId: opt.value }));
+                  setWarehouseQuery(opt.label);
+                }}
+                options={(warehouses?.rows || []).map((w) => ({ value: String(w.id), label: `${w.code} - ${w.name}` }))}
+                placeholder="Search warehouse..."
+              />
             </FormField>
             <FormField label="Planned Qty" required>
               <Input type="number" min="0.01" step="0.01" value={form.plannedQty} onChange={(e) => setForm((f) => ({ ...f, plannedQty: e.target.value }))} />

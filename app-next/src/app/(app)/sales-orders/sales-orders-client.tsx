@@ -26,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FormField } from "@/components/form-field";
+import { Typeahead } from "@/components/typeahead";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Pagination } from "@/components/pagination";
 import { TableSkeleton } from "@/components/table-skeleton";
@@ -50,6 +51,7 @@ type Product = { id: number; sku: string | null; name: string; unitCode: string 
 
 type SoLine = {
   productId: string;
+  productQuery: string;
   productName: string;
   unitName: string;
   qty: string;
@@ -65,17 +67,21 @@ export function SalesOrdersClient() {
   const [offset, setOffset] = React.useState(0);
   const { data, loading, error, refresh } = useList<Row>("/api/sales-orders", { q, limit, offset });
 
-  const { data: customers } = useList<Customer>("/api/customers", { limit: 300 });
-  const { data: products } = useList<Product>("/api/products", { limit: 300 });
-
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState<Row | null>(null);
+  const [customerQuery, setCustomerQuery] = React.useState("");
+  const [productLookupQuery, setProductLookupQuery] = React.useState("");
+  const customerLookupQ = useDebounced(customerQuery, 250);
+  const productLookupQ = useDebounced(productLookupQuery, 250);
+  const { data: customers } = useList<Customer>("/api/customers", { q: customerLookupQ, limit: 100 });
+  const { data: products } = useList<Product>("/api/products", { q: productLookupQ, limit: 100 });
+
   const [form, setForm] = React.useState({
     orderDate: new Date().toISOString().slice(0, 10),
     customerId: "",
     notes: "",
-    items: [{ productId: "", productName: "", unitName: "", qty: "1", unitPrice: "0", gstRate: "18" }] as SoLine[],
+    items: [{ productId: "", productQuery: "", productName: "", unitName: "", qty: "1", unitPrice: "0", gstRate: "18" }] as SoLine[],
   });
 
   React.useEffect(() => {
@@ -108,7 +114,8 @@ export function SalesOrdersClient() {
       });
       toast.success("Sales order created");
       setDialogOpen(false);
-      setForm({ orderDate: new Date().toISOString().slice(0, 10), customerId: "", notes: "", items: [{ productId: "", productName: "", unitName: "", qty: "1", unitPrice: "0", gstRate: "18" }] });
+      setCustomerQuery("");
+      setForm({ orderDate: new Date().toISOString().slice(0, 10), customerId: "", notes: "", items: [{ productId: "", productQuery: "", productName: "", unitName: "", qty: "1", unitPrice: "0", gstRate: "18" }] });
       refresh();
       router.push(`/sales-orders/${row.id}`);
     } catch (err) {
@@ -182,10 +189,20 @@ export function SalesOrdersClient() {
                 <Input type="date" value={form.orderDate} onChange={(e) => setForm((f) => ({ ...f, orderDate: e.target.value }))} />
               </FormField>
               <FormField label="Customer" required>
-                <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={form.customerId} onChange={(e) => setForm((f) => ({ ...f, customerId: e.target.value }))}>
-                  <option value="">Select customer</option>
-                  {(customers?.rows || []).map((c) => <option key={c.id} value={c.id}>{c.code} - {c.name}</option>)}
-                </select>
+                <Typeahead
+                  value={form.customerId}
+                  inputValue={customerQuery}
+                  onInputValueChange={(v) => {
+                    setCustomerQuery(v);
+                    setForm((f) => ({ ...f, customerId: "" }));
+                  }}
+                  onSelect={(opt) => {
+                    setForm((f) => ({ ...f, customerId: opt.value }));
+                    setCustomerQuery(opt.label);
+                  }}
+                  options={(customers?.rows || []).map((c) => ({ value: String(c.id), label: `${c.code} - ${c.name}` }))}
+                  placeholder="Search customer..."
+                />
               </FormField>
             </div>
 
@@ -196,32 +213,40 @@ export function SalesOrdersClient() {
             <div className="space-y-2 rounded-md border p-3">
               <div className="flex items-center justify-between">
                 <div className="text-sm font-semibold">Line Items</div>
-                <Button type="button" variant="outline" size="sm" onClick={() => setForm((f) => ({ ...f, items: [...f.items, { productId: "", productName: "", unitName: "", qty: "1", unitPrice: "0", gstRate: "18" }] }))}><Plus className="h-4 w-4" /> Add Line</Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => setForm((f) => ({ ...f, items: [...f.items, { productId: "", productQuery: "", productName: "", unitName: "", qty: "1", unitPrice: "0", gstRate: "18" }] }))}><Plus className="h-4 w-4" /> Add Line</Button>
               </div>
 
               {form.items.map((line, idx) => (
                 <div key={idx} className="grid grid-cols-1 gap-2 rounded-md border bg-muted/30 p-2 md:grid-cols-12">
                   <div className="md:col-span-5">
-                    <select
-                      className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    <Typeahead
                       value={line.productId}
-                      onChange={(e) => {
-                        const p = (products?.rows || []).find((x) => String(x.id) === e.target.value);
+                      inputValue={line.productQuery}
+                      onInputValueChange={(v) => {
+                        setProductLookupQuery(v);
+                        setForm((f) => {
+                          const items = [...f.items];
+                          items[idx] = { ...items[idx], productId: "", productQuery: v, productName: v, unitName: "" };
+                          return { ...f, items };
+                        });
+                      }}
+                      onSelect={(opt) => {
+                        const p = (products?.rows || []).find((x) => String(x.id) === opt.value);
                         setForm((f) => {
                           const items = [...f.items];
                           items[idx] = {
                             ...items[idx],
-                            productId: e.target.value,
+                            productId: opt.value,
+                            productQuery: opt.label,
                             productName: p?.name || "",
                             unitName: p?.unitCode || p?.unitName || "",
                           };
                           return { ...f, items };
                         });
                       }}
-                    >
-                      <option value="">Select product</option>
-                      {(products?.rows || []).map((p) => <option key={p.id} value={p.id}>{p.sku || "NO-SKU"} - {p.name}</option>)}
-                    </select>
+                      options={(products?.rows || []).map((p) => ({ value: String(p.id), label: `${p.sku || "NO-SKU"} - ${p.name}` }))}
+                      placeholder="Search product..."
+                    />
                   </div>
                   <div className="md:col-span-2"><Input type="number" min="0.01" step="0.01" value={line.qty} onChange={(e) => setForm((f) => { const items = [...f.items]; items[idx] = { ...items[idx], qty: e.target.value }; return { ...f, items }; })} placeholder="Qty" /></div>
                   <div className="md:col-span-2"><Input type="number" min="0" step="0.01" value={line.unitPrice} onChange={(e) => setForm((f) => { const items = [...f.items]; items[idx] = { ...items[idx], unitPrice: e.target.value }; return { ...f, items }; })} placeholder="Unit Price" /></div>

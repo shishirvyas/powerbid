@@ -93,6 +93,7 @@ export function Typeahead({
           }
         }}
         placeholder={placeholder}
+        autoComplete="off"
         className={cn(
           "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background",
           "placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2",
@@ -101,31 +102,35 @@ export function Typeahead({
         disabled={disabled}
         data-selected-value={value}
       />
-      {open && filtered.length > 0 ? (
+      {open ? (
         <div className="absolute z-[130] mt-1 max-h-64 w-full overflow-auto rounded-md border bg-popover text-popover-foreground p-1 shadow-md ring-1 ring-border/60">
-          {filtered.map((option, idx) => {
-            const active = idx === activeIndex;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  pick(option);
-                }}
-                onMouseEnter={() => setActiveIndex(idx)}
-                className={cn(
-                  "flex w-full items-start justify-between rounded bg-popover px-2 py-1.5 text-left text-sm",
-                  active ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
-                )}
-              >
-                <span className="truncate">{option.label}</span>
-                {option.secondary ? (
-                  <span className="ml-2 shrink-0 text-xs text-muted-foreground">{option.secondary}</span>
-                ) : null}
-              </button>
-            );
-          })}
+          {filtered.length > 0 ? (
+            filtered.map((option, idx) => {
+              const active = idx === activeIndex;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    pick(option);
+                  }}
+                  onMouseEnter={() => setActiveIndex(idx)}
+                  className={cn(
+                    "flex w-full items-start justify-between rounded bg-popover px-2 py-1.5 text-left text-sm",
+                    active ? "bg-accent text-accent-foreground" : "hover:bg-accent/60",
+                  )}
+                >
+                  <span className="truncate">{option.label}</span>
+                  {option.secondary ? (
+                    <span className="ml-2 shrink-0 text-xs text-muted-foreground">{option.secondary}</span>
+                  ) : null}
+                </button>
+              );
+            })
+          ) : (
+            <div className="px-2 py-1.5 text-sm text-muted-foreground">No matching data found</div>
+          )}
         </div>
       ) : null}
     </div>

@@ -7,6 +7,7 @@ import { PageHeader, EmptyState } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Typeahead } from "@/components/typeahead";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
 import {
@@ -250,6 +251,7 @@ function ProductFormDialog({
   onSaved: () => void;
 }) {
   const [form, setForm] = React.useState<ProductForm>(empty);
+  const [unitQuery, setUnitQuery] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const { errors, set: setErrors, reset: resetErrors, setOne } = useFieldErrors();
 
@@ -267,6 +269,7 @@ function ProductFormDialog({
             }
           : empty,
       );
+      setUnitQuery(editing?.unitCode || editing?.unitName || "");
     }
   }, [open, editing, resetErrors]);
 
@@ -338,14 +341,20 @@ function ProductFormDialog({
               <Input value={form.name} onChange={(e) => update("name", e.target.value)} />
             </FormField>
             <FormField label="Unit" error={errors.unitId}>
-              <Select value={form.unitId} onChange={(e) => update("unitId", e.target.value)}>
-                <option value="">—</option>
-                {masters?.units.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.code} — {u.name}
-                  </option>
-                ))}
-              </Select>
+              <Typeahead
+                value={form.unitId}
+                inputValue={unitQuery}
+                onInputValueChange={(v) => {
+                  setUnitQuery(v);
+                  update("unitId", "");
+                }}
+                onSelect={(opt) => {
+                  update("unitId", opt.value);
+                  setUnitQuery(opt.label);
+                }}
+                options={(masters?.units || []).filter((u) => u.isActive).map((u) => ({ value: String(u.id), label: `${u.code} — ${u.name}` }))}
+                placeholder="Search unit..."
+              />
             </FormField>
             <FormField label="HSM Code" error={errors.hsmCode}>
               <Input value={form.hsmCode} onChange={(e) => update("hsmCode", e.target.value)} />
