@@ -1,4 +1,17 @@
 
+import {
+  pgTable,
+  serial,
+  text,
+  integer,
+  boolean,
+  timestamp,
+  numeric,
+  index,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
+import { users, products, gstSlabs } from "./src/lib/db/schema";
+
 /* ------------------------------ Suppliers ------------------------------ */
 export const suppliers = pgTable(
   "suppliers",
