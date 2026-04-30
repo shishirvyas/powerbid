@@ -28,6 +28,7 @@ import { TableSkeleton } from "@/components/table-skeleton";
 import { FormField, getServerFieldErrors, useFieldErrors } from "@/components/form-field";
 import { useDebounced, useList, useResource } from "@/lib/hooks";
 import { api, ApiClientError } from "@/lib/api-client";
+import { formatDate } from "@/lib/calc";
 
 type StockItemRow = {
   id: number;

@@ -185,6 +185,7 @@ export function SupplierDetailClient({ supplierId }: { supplierId: number }) {
   }
 
   async function saveAll() {
+    if (!form) return;
     setSaving(true);
     try {
       await api(`/api/suppliers/${supplierId}/profile`, {

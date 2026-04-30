@@ -85,7 +85,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
 
     const calc = calcQuotation({
       items: data.items.map((i) => ({
-        productId: i.productId || null,
+        productId: i.productId ?? 0,
         productName: i.productName,
         unitName: i.unitName || null,
         qty: i.qty,
