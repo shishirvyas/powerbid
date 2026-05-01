@@ -286,6 +286,8 @@ Also update the `Last updated` date and add a short entry to the change log sect
 - 2026-05-02: Implemented RBAC seed bootstrap: default roles (admin/sales/procurement/production/stores/qa), departments, and full ORDER/BOM/PO permission matrix. Added RBAC_STRICT_MODE env flag. Admin endpoint: POST /api/admin/rbac/seed.
 - 2026-05-02: Implemented Entity Versioning backend: 5 DB tables (entity_version_sets, entity_versions, entity_version_deltas, procurement_version_locks, version_audit_log), EntityVersioningService with transactional version creation, delta computation, procurement locks, and audit trail. REST API endpoints at /api/versioning/[entityType]/[entityId].
 - 2026-05-02: Implemented Change Propagation backend: 3 DB tables (change_propagation_events, change_impact_records, change_notifications), ChangePropagationService with BOM impact analysis (production orders via bomId, POs via raw material overlap), auto-flagging of draft records, role-targeted notifications, and acknowledge/resolve lifecycle. REST API endpoints at /api/change-propagation/.
+- 2026-05-02: Wired frontend end-to-end: BOM save auto-versions + triggers propagation; Dashboard open-impacts widget with inline Acknowledge; Topbar notification bell with 30s polling and mark-read.
+- 2026-05-02: Added Flow Guide page at /flow-guide — interactive step-by-step demo guide with live API health checks, architecture diagram, runnable steps (seed RBAC → create BOM → snapshot version → propagate → view impacts → acknowledge → check notifications), full API reference table, and buyer feature checklist. Linked from sidebar under Analytics.
 
 ## Contributor Checklist (Every Feature Change)
 - Update or add feature section

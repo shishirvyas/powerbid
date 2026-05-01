@@ -16,6 +16,7 @@ import {
   Settings,
   Users,
   X,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,7 @@ const navConfig: NavNode[] = [
     children: [
       { label: "Reports", href: "/reports", icon: BarChart3 },
       { label: "Showcase", href: "/showcase", icon: MonitorPlay },
+      { label: "Flow Guide", href: "/flow-guide", icon: Zap },
     ],
   },
   {
