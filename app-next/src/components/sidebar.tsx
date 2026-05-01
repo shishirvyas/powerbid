@@ -7,6 +7,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import {
   BarChart3,
   FileText,
+  GitBranch,
   Inbox,
   LayoutDashboard,
   Menu,
@@ -86,7 +87,10 @@ const navConfig: NavNode[] = [
     type: "group",
     key: "administration",
     label: "Administration",
-    children: [{ label: "Settings", href: "/settings", icon: Settings }],
+    children: [
+      { label: "Settings", href: "/settings", icon: Settings },
+      { label: "Workflow Builder", href: "/workflow-builder", icon: GitBranch },
+    ],
   },
   {
     type: "group",

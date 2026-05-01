@@ -127,6 +127,7 @@ export const inquiries = pgTable(
       dateOfInquiry: text("date_of_inquiry"),
       referenceNumber: text("reference_number"),
     assignedTo: integer("assigned_to").references(() => users.id, { onDelete: "set null" }),
+    priority: text("priority"), // low | medium | high (legacy column, kept to prevent data loss)
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -760,3 +761,455 @@ export const dispatchItems = pgTable(
     idxSoItem: index("idx_dispatch_items_so_item").on(t.soItemId),
   }),
 );
+
+/* ----------------------------- workflow engine ------------------- */
+export const workflowInstances = pgTable(
+  "workflow_instances",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().default("default"),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    configVersion: integer("config_version").notNull().default(1),
+    currentState: text("current_state").notNull(),
+    createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: integer("updated_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    uqEntity: uniqueIndex("uq_workflow_instances_tenant_entity").on(t.tenantId, t.entityType, t.entityId),
+    idxState: index("idx_workflow_instances_state").on(t.currentState),
+  }),
+);
+
+export const workflowTransitionLogs = pgTable(
+  "workflow_transition_logs",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().default("default"),
+    workflowInstanceId: integer("workflow_instance_id")
+      .notNull()
+      .references(() => workflowInstances.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    action: text("action").notNull(),
+    fromState: text("from_state").notNull(),
+    toState: text("to_state").notNull(),
+    userRole: text("user_role").notNull(),
+    comment: text("comment"),
+    metadata: text("metadata"),
+    triggeredBy: integer("triggered_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    idxWorkflow: index("idx_workflow_transition_logs_workflow").on(t.workflowInstanceId),
+    idxEntity: index("idx_workflow_transition_logs_entity").on(t.tenantId, t.entityType, t.entityId),
+  }),
+);
+
+export const workflowEvents = pgTable(
+  "workflow_events",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().default("default"),
+    workflowInstanceId: integer("workflow_instance_id")
+      .notNull()
+      .references(() => workflowInstances.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    eventName: text("event_name").notNull(),
+    payload: text("payload"),
+    status: text("status").notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
+  },
+  (t) => ({
+    idxStatus: index("idx_workflow_events_status").on(t.status),
+    idxEntity: index("idx_workflow_events_entity").on(t.tenantId, t.entityType, t.entityId),
+  }),
+);
+
+export const workflowVersions = pgTable(
+  "workflow_versions",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().default("default"),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    versionNo: integer("version_no").notNull(),
+    isCurrent: boolean("is_current").notNull().default(true),
+    snapshot: text("snapshot"),
+    createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    uqVersion: uniqueIndex("uq_workflow_versions_entity_version").on(
+      t.tenantId,
+      t.entityType,
+      t.entityId,
+      t.versionNo,
+    ),
+    idxCurrent: index("idx_workflow_versions_current").on(t.tenantId, t.entityType, t.entityId, t.isCurrent),
+  }),
+);
+
+/* ----------------------------- rbac -------------------------------- */
+export const roles = pgTable(
+  "roles",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().default("default"),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    isSystem: boolean("is_system").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    uqRoleCode: uniqueIndex("uq_roles_tenant_code").on(t.tenantId, t.code),
+  }),
+);
+
+export const departments = pgTable(
+  "departments",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().default("default"),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    uqDepartmentCode: uniqueIndex("uq_departments_tenant_code").on(t.tenantId, t.code),
+  }),
+);
+
+export const userRoleBindings = pgTable(
+  "user_role_bindings",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().default("default"),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    roleId: integer("role_id")
+      .notNull()
+      .references(() => roles.id, { onDelete: "cascade" }),
+    departmentId: integer("department_id").references(() => departments.id, {
+      onDelete: "set null",
+    }),
+    scopeType: text("scope_type").notNull().default("department"),
+    scopeRef: text("scope_ref"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    idxUserRole: index("idx_user_role_bindings_user").on(t.tenantId, t.userId),
+  }),
+);
+
+export const workflowStateAccess = pgTable(
+  "workflow_state_access",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().default("default"),
+    workflowType: text("workflow_type").notNull(),
+    stateCode: text("state_code").notNull(),
+    roleId: integer("role_id")
+      .notNull()
+      .references(() => roles.id, { onDelete: "cascade" }),
+    canView: boolean("can_view").notNull().default(true),
+  },
+  (t) => ({
+    uqWorkflowStateRole: uniqueIndex("uq_workflow_state_access").on(
+      t.tenantId,
+      t.workflowType,
+      t.stateCode,
+      t.roleId,
+    ),
+  }),
+);
+
+export const workflowActionPermissions = pgTable(
+  "workflow_action_permissions",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().default("default"),
+    workflowType: text("workflow_type").notNull(),
+    fromState: text("from_state").notNull(),
+    actionCode: text("action_code").notNull(),
+    toState: text("to_state"),
+    roleId: integer("role_id")
+      .notNull()
+      .references(() => roles.id, { onDelete: "cascade" }),
+    departmentId: integer("department_id").references(() => departments.id, {
+      onDelete: "set null",
+    }),
+    effect: text("effect").notNull().default("allow"), // allow | deny
+    guardKey: text("guard_key"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    idxWorkflowAction: index("idx_workflow_action_permissions_lookup").on(
+      t.tenantId,
+      t.workflowType,
+      t.fromState,
+      t.actionCode,
+    ),
+  }),
+);
+
+export const rbacDecisionAudit = pgTable(
+  "rbac_decision_audit",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().default("default"),
+    workflowType: text("workflow_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    currentState: text("current_state").notNull(),
+    actionCode: text("action_code").notNull(),
+    targetState: text("target_state").notNull(),
+    actorUserId: integer("actor_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    actorRole: text("actor_role").notNull(),
+    departmentId: integer("department_id").references(() => departments.id, {
+      onDelete: "set null",
+    }),
+    decision: text("decision").notNull(), // allow | deny
+    reason: text("reason").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    idxWorkflowAudit: index("idx_rbac_decision_audit_workflow").on(
+      t.tenantId,
+      t.workflowType,
+      t.entityId,
+      t.createdAt,
+    ),
+  }),
+);
+
+/* ----------------------------- entity versioning -------------------- */
+
+/**
+ * entity_version_sets — one row per versioned entity (BOM, ORDER, etc.).
+ * Acts as the anchor for all version rows.
+ */
+export const entityVersionSets = pgTable(
+  "entity_version_sets",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().default("default"),
+    entityType: text("entity_type").notNull(), // BOM | ORDER | PO
+    entityId: integer("entity_id").notNull(),
+    currentVersionId: integer("current_version_id"), // FK set after first version created
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    uqEntity: uniqueIndex("uq_entity_version_sets").on(t.tenantId, t.entityType, t.entityId),
+  }),
+);
+
+/**
+ * entity_versions — immutable snapshot of entity data at a point in time.
+ * Snapshot is stored as serialised JSON.
+ */
+export const entityVersions = pgTable(
+  "entity_versions",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().default("default"),
+    versionSetId: integer("version_set_id")
+      .notNull()
+      .references(() => entityVersionSets.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    versionNo: integer("version_no").notNull(),
+    label: text("label"),          // e.g. "v1.0", "Revision after procurement hold"
+    snapshot: text("snapshot").notNull(), // JSON blob of the entity at this version
+    isCurrent: boolean("is_current").notNull().default(false),
+    createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    uqEntityVersion: uniqueIndex("uq_entity_versions_no").on(t.tenantId, t.entityType, t.entityId, t.versionNo),
+    idxCurrent: index("idx_entity_versions_current").on(t.tenantId, t.entityType, t.entityId, t.isCurrent),
+  }),
+);
+
+/**
+ * entity_version_deltas — diff between two consecutive versions.
+ * Computed and stored at version-creation time for fast querying.
+ */
+export const entityVersionDeltas = pgTable(
+  "entity_version_deltas",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().default("default"),
+    fromVersionId: integer("from_version_id")
+      .notNull()
+      .references(() => entityVersions.id, { onDelete: "cascade" }),
+    toVersionId: integer("to_version_id")
+      .notNull()
+      .references(() => entityVersions.id, { onDelete: "cascade" }),
+    delta: text("delta").notNull(), // JSON: { added, removed, changed } fields
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    idxDelta: index("idx_entity_version_deltas").on(t.fromVersionId, t.toVersionId),
+  }),
+);
+
+/**
+ * procurement_version_locks — records which version a procurement action resolved against.
+ * Ensures procurement actions are always traceable to the exact entity version they used.
+ */
+export const procurementVersionLocks = pgTable(
+  "procurement_version_locks",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().default("default"),
+    procurementEntityType: text("procurement_entity_type").notNull(), // RFQ | PO
+    procurementEntityId: integer("procurement_entity_id").notNull(),
+    lockedVersionId: integer("locked_version_id")
+      .notNull()
+      .references(() => entityVersions.id, { onDelete: "restrict" }),
+    lockedAt: timestamp("locked_at", { withTimezone: true }).notNull().defaultNow(),
+    lockedBy: integer("locked_by").references(() => users.id, { onDelete: "set null" }),
+  },
+  (t) => ({
+    uqProcurementLock: uniqueIndex("uq_procurement_version_locks").on(
+      t.tenantId,
+      t.procurementEntityType,
+      t.procurementEntityId,
+    ),
+  }),
+);
+
+/**
+ * version_audit_log — human-readable audit trail for all version-related operations.
+ */
+export const versionAuditLog = pgTable(
+  "version_audit_log",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().default("default"),
+    entityType: text("entity_type").notNull(),
+    entityId: integer("entity_id").notNull(),
+    versionId: integer("version_id").references(() => entityVersions.id, { onDelete: "set null" }),
+    action: text("action").notNull(), // create_version | promote | lock | supersede
+    actorUserId: integer("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    detail: text("detail"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    idxAuditEntity: index("idx_version_audit_log_entity").on(t.tenantId, t.entityType, t.entityId),
+    idxAuditCreated: index("idx_version_audit_log_created").on(t.createdAt),
+  }),
+);
+
+/* ====================================================================
+ * CHANGE PROPAGATION
+ * ====================================================================
+ *
+ * changePropagationEvents — one record per BOM version change event.
+ *   Captures which BOM changed, to which version, and whether the
+ *   downstream impact analysis has been completed.
+ *
+ * changeImpactRecords — one record per impacted downstream entity
+ *   (production_order | purchase_order).  Tracks revision status,
+ *   auto-action taken, and acknowledgement by a human actor.
+ *
+ * changeNotifications — pending notifications to send to role owners
+ *   about specific impact records that need attention.
+ */
+
+export const changePropagationEvents = pgTable(
+  "change_propagation_events",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().default("default"),
+    /** BOM that changed — references bomMaster.id */
+    bomId: integer("bom_id").notNull().references(() => bomMaster.id, { onDelete: "cascade" }),
+    /** The new entity version that triggered this event */
+    newVersionId: integer("new_version_id").references(() => entityVersions.id, { onDelete: "set null" }),
+    /** Status of the propagation run */
+    status: text("status").notNull().default("pending"), // pending | running | completed | failed
+    impactCount: integer("impact_count").notNull().default(0),
+    triggeredBy: integer("triggered_by").references(() => users.id, { onDelete: "set null" }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    errorDetail: text("error_detail"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    idxBom: index("idx_change_propagation_events_bom").on(t.tenantId, t.bomId),
+    idxStatus: index("idx_change_propagation_events_status").on(t.status),
+  }),
+);
+
+export const changeImpactRecords = pgTable(
+  "change_impact_records",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().default("default"),
+    propagationEventId: integer("propagation_event_id")
+      .notNull()
+      .references(() => changePropagationEvents.id, { onDelete: "cascade" }),
+    /** What kind of downstream entity was impacted */
+    impactedEntityType: text("impacted_entity_type").notNull(), // production_order | purchase_order
+    impactedEntityId: integer("impacted_entity_id").notNull(),
+    /** Human-readable description of why this record is impacted */
+    impactReason: text("impact_reason").notNull(),
+    /** Current revision status */
+    revisionStatus: text("revision_status").notNull().default("needs_revision"), // needs_revision | acknowledged | resolved | auto_actioned
+    /** If an auto-action was taken, record what was done */
+    autoAction: text("auto_action"), // none | flagged | cancelled_draft | ...
+    autoActionDetail: text("auto_action_detail"),
+    /** Human acknowledgement */
+    acknowledgedBy: integer("acknowledged_by").references(() => users.id, { onDelete: "set null" }),
+    acknowledgedAt: timestamp("acknowledged_at", { withTimezone: true }),
+    resolvedBy: integer("resolved_by").references(() => users.id, { onDelete: "set null" }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    resolutionNote: text("resolution_note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    idxEvent: index("idx_change_impact_records_event").on(t.propagationEventId),
+    idxEntity: index("idx_change_impact_records_entity").on(
+      t.tenantId, t.impactedEntityType, t.impactedEntityId,
+    ),
+    idxRevisionStatus: index("idx_change_impact_records_revision").on(t.revisionStatus),
+  }),
+);
+
+export const changeNotifications = pgTable(
+  "change_notifications",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: text("tenant_id").notNull().default("default"),
+    impactRecordId: integer("impact_record_id")
+      .notNull()
+      .references(() => changeImpactRecords.id, { onDelete: "cascade" }),
+    /** Role that should receive this notification */
+    targetRole: text("target_role").notNull(),
+    targetUserId: integer("target_user_id").references(() => users.id, { onDelete: "set null" }),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    isRead: boolean("is_read").notNull().default(false),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    idxImpact: index("idx_change_notifications_impact").on(t.impactRecordId),
+    idxUser: index("idx_change_notifications_user").on(t.targetUserId),
+    idxUnread: index("idx_change_notifications_unread").on(t.tenantId, t.isRead),
+  }),
+);
+

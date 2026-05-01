@@ -166,13 +166,39 @@ export function BomsClient() {
     };
 
     try {
+      let savedId: number;
       if (editingId) {
         await api(`/api/boms/${editingId}`, { method: "PUT", json: payload });
+        savedId = editingId;
         toast.success("BOM updated");
       } else {
-        await api("/api/boms", { method: "POST", json: payload });
+        const created = await api<{ id: number }>("/api/boms", { method: "POST", json: payload });
+        savedId = created.id;
         toast.success("BOM created");
       }
+
+      // Snapshot the current BOM state as a new version
+      try {
+        const versionRes = await api<{ version: { id: number } }>(
+          `/api/versioning/BOM/${savedId}`,
+          {
+            method: "POST",
+            json: {
+              snapshot: { ...payload, id: savedId },
+              label: `v${payload.version}`,
+            },
+          },
+        );
+        // Trigger change propagation for downstream impact analysis
+        await api("/api/change-propagation/propagate", {
+          method: "POST",
+          json: { bomId: savedId, newVersionId: versionRes.version.id },
+        });
+      } catch {
+        // Non-fatal: versioning/propagation errors should not block BOM save
+        toast.warning("BOM saved but version snapshot failed — check logs");
+      }
+
       setDialogOpen(false);
       refresh();
     } catch (err) {

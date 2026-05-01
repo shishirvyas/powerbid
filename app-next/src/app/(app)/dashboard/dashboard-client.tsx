@@ -6,11 +6,13 @@ import {
   AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
+  CheckCircle2,
   Clock3,
   FileText,
   Inbox,
   RefreshCw,
   Users,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -240,6 +242,122 @@ function StatusPill({ label, value, tone }: { label: string; value: number; tone
   );
 }
 
+type OpenImpact = {
+  id: number;
+  impactedEntityType: string;
+  impactedEntityId: string;
+  impactReason: string;
+  revisionStatus: string;
+  createdAt: string;
+  bomId?: number;
+  bomCode?: string;
+};
+
+function OpenImpactsWidget() {
+  const { data, loading, refresh } = useResource<{ impacts: OpenImpact[]; total: number }>(
+    "/api/change-propagation/open-impacts",
+  );
+  const [acking, setAcking] = React.useState<number | null>(null);
+
+  async function acknowledge(id: number) {
+    setAcking(id);
+    try {
+      await fetch(`/api/change-propagation/impacts/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "acknowledge" }),
+      });
+      refresh();
+    } finally {
+      setAcking(null);
+    }
+  }
+
+  const impacts = data?.impacts ?? [];
+
+  if (!loading && impacts.length === 0) return null;
+
+  return (
+    <Card className="border-amber-400/60 bg-amber-50/30 dark:bg-amber-950/20">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Zap className="h-4 w-4 text-amber-500" />
+            BOM Change Impacts
+            {data?.total ? (
+              <Badge variant="warning" className="ml-1">{data.total}</Badge>
+            ) : null}
+          </CardTitle>
+          <Button type="button" variant="ghost" size="sm" onClick={refresh}>
+            <RefreshCw className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+        <CardDescription>Production orders and purchase orders needing review after BOM updates</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-10 animate-pulse rounded-md bg-muted" />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {impacts.slice(0, 8).map((impact) => (
+              <div
+                key={impact.id}
+                className="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 truncate font-medium">
+                    <span className="capitalize text-muted-foreground">
+                      {impact.impactedEntityType.replace("_", " ")}
+                    </span>
+                    <span>#{impact.impactedEntityId}</span>
+                  </div>
+                  <div className="truncate text-xs text-muted-foreground">{impact.impactReason}</div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge
+                    variant={
+                      impact.revisionStatus === "needs_revision"
+                        ? "destructive"
+                        : impact.revisionStatus === "acknowledged"
+                          ? "warning"
+                          : "success"
+                    }
+                    className="text-[10px]"
+                  >
+                    {impact.revisionStatus.replace("_", " ")}
+                  </Badge>
+                  {impact.revisionStatus === "needs_revision" && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-6 px-2 text-[11px]"
+                      disabled={acking === impact.id}
+                      onClick={() => acknowledge(impact.id)}
+                    >
+                      <CheckCircle2 className="mr-1 h-3 w-3" />
+                      Ack
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+            {(data?.total ?? 0) > 8 && (
+              <p className="text-center text-xs text-muted-foreground">
+                +{(data?.total ?? 0) - 8} more impacts
+              </p>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function DashboardClient() {
   const [preset, setPreset] = React.useState<Preset>("30d");
   const { data, loading, error, refresh } = useResource<DashboardOverview>(`/api/dashboard/overview?preset=${preset}`);
@@ -342,6 +460,8 @@ export function DashboardClient() {
               </CardContent>
             </Card>
           </div>
+
+          <OpenImpactsWidget />
 
           <div className="grid gap-3 xl:grid-cols-2">
             <Card>

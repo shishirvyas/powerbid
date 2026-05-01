@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { LogOut, Search, User } from "lucide-react";
+import { Bell, LogOut, Search, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { MobileNav } from "@/components/sidebar";
@@ -17,6 +17,104 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 type User = { name: string; email: string; role: string };
+
+type Notification = {
+  id: number;
+  title: string;
+  body: string;
+  isRead: boolean;
+  createdAt: string;
+  impactRecordId: number;
+};
+
+function NotificationBell({ role }: { role: string }) {
+  const [notifications, setNotifications] = React.useState<Notification[]>([]);
+  const [open, setOpen] = React.useState(false);
+
+  const fetchNotifs = React.useCallback(async () => {
+    try {
+      const res = await fetch(`/api/change-propagation/notifications?role=${encodeURIComponent(role)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setNotifications(data.notifications ?? []);
+    } catch {
+      // silently ignore — notification bell is non-critical
+    }
+  }, [role]);
+
+  React.useEffect(() => {
+    fetchNotifs();
+    const timer = setInterval(fetchNotifs, 30_000);
+    return () => clearInterval(timer);
+  }, [fetchNotifs]);
+
+  const unread = notifications.filter((n) => !n.isRead).length;
+
+  async function markRead(id: number) {
+    try {
+      await fetch("/api/change-propagation/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notificationId: id }),
+      });
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)),
+      );
+    } catch {
+      // silently ignore
+    }
+  }
+
+  async function markAllRead() {
+    await Promise.all(notifications.filter((n) => !n.isRead).map((n) => markRead(n.id)));
+  }
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="relative h-9 w-9" aria-label="Notifications">
+          <Bell className="h-4 w-4" />
+          {unread > 0 && (
+            <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
+              {unread > 9 ? "9+" : unread}
+            </span>
+          )}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-y-auto">
+        <DropdownMenuLabel className="flex items-center justify-between">
+          <span>BOM Impact Alerts</span>
+          {unread > 0 && (
+            <button
+              type="button"
+              onClick={markAllRead}
+              className="text-[11px] font-normal text-primary hover:underline"
+            >
+              Mark all read
+            </button>
+          )}
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {notifications.length === 0 ? (
+          <div className="px-3 py-4 text-center text-xs text-muted-foreground">No notifications</div>
+        ) : (
+          notifications.slice(0, 20).map((n) => (
+            <DropdownMenuItem
+              key={n.id}
+              className={`flex flex-col items-start gap-0.5 px-3 py-2.5 ${!n.isRead ? "bg-primary/5" : ""}`}
+              onClick={() => !n.isRead && markRead(n.id)}
+            >
+              <div className={`text-xs font-medium ${!n.isRead ? "text-foreground" : "text-muted-foreground"}`}>
+                {n.title}
+              </div>
+              <div className="line-clamp-2 text-[11px] text-muted-foreground">{n.body}</div>
+            </DropdownMenuItem>
+          ))
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export function Topbar({ user }: { user: User }) {
   const router = useRouter();
@@ -73,6 +171,7 @@ export function Topbar({ user }: { user: User }) {
       </button>
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
         <ThemeToggle />
+        <NotificationBell role={user.role} />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="h-9 gap-2 px-2">
