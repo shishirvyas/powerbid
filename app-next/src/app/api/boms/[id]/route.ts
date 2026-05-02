@@ -79,7 +79,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     const rollup = calcBomRollup({
       lines: items.map((it) => ({
         rawMaterialId: it.rawMaterialId ?? 0,
-        rawMaterialName: it.rawMaterialName,
+        rawMaterialName: it.rawMaterialName ?? "Unknown material",
         qtyPerUnit: Number(it.qtyPerUnit),
         wastagePercent: Number(it.wastagePercent),
         estimatedRate: rates[it.rawMaterialId ?? 0] || 0,

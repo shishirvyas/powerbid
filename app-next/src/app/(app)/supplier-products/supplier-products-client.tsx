@@ -24,7 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { FormField, getServerFieldErrors, summarizeFieldErrors } from "@/components/form-field";
+import { FieldErrors, FormField, getServerFieldErrors, summarizeFieldErrors } from "@/components/form-field";
 import { Typeahead } from "@/components/typeahead";
 import { Pagination } from "@/components/pagination";
 import { TableSkeleton } from "@/components/table-skeleton";
@@ -46,8 +46,6 @@ type SupplierProduct = {
   isActive: boolean;
   createdAt: string;
 };
-
-type SupplierOption = { id: number; code: string; companyName: string };
 
 type SPForm = {
   supplierId: string;
@@ -87,11 +85,11 @@ export function SupplierProductsClient() {
   const [confirmDelete, setConfirmDelete] = React.useState<SupplierProduct | null>(null);
   const [form, setForm] = React.useState<SPForm>(emptyForm);
   const [saving, setSaving] = React.useState(false);
-  const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
+  const [fieldErrors, setFieldErrors] = React.useState<FieldErrors>({});
 
   const [supplierLookupQ, setSupplierLookupQ] = React.useState("");
   const debouncedSupplierQ = useDebounced(supplierLookupQ, 250);
-  const { data: suppliers } = useList<SupplierOption>("/api/suppliers", { q: debouncedSupplierQ, limit: 50 });
+  const { data: suppliers } = useList<{ id: number; code: string; companyName: string }>("/api/suppliers", { q: debouncedSupplierQ, limit: 50 });
 
   React.useEffect(() => { setOffset(0); }, [q, limit]);
 
@@ -140,10 +138,10 @@ export function SupplierProductsClient() {
     };
     try {
       if (editingId) {
-        await api(`/api/supplier-products/${editingId}`, { method: "PUT", body: payload });
+        await api(`/api/supplier-products/${editingId}`, { method: "PUT", json: payload });
         toast.success("Supplier product updated");
       } else {
-        await api("/api/supplier-products", { method: "POST", body: payload });
+        await api("/api/supplier-products", { method: "POST", json: payload });
         toast.success("Supplier product created");
       }
       setDialogOpen(false);
@@ -182,11 +180,14 @@ export function SupplierProductsClient() {
 
   return (
     <>
-      <PageHeader title="Supplier Products">
-        <Button size="sm" onClick={openCreate}>
-          <Plus className="mr-1 h-4 w-4" /> New Product
-        </Button>
-      </PageHeader>
+      <PageHeader
+        title="Supplier Products"
+        actions={
+          <Button size="sm" onClick={openCreate}>
+            <Plus className="mr-1 h-4 w-4" /> New Product
+          </Button>
+        }
+      />
 
       <div className="flex items-center gap-2 px-4 pb-3 pt-1">
         <div className="relative flex-1 max-w-sm">
@@ -206,7 +207,14 @@ export function SupplierProductsClient() {
         ) : error ? (
           <p className="text-sm text-destructive">{error}</p>
         ) : rows.length === 0 ? (
-          <EmptyState message="No supplier products found." onNew={openCreate} />
+          <EmptyState
+            title="No supplier products found."
+            action={
+              <Button size="sm" onClick={openCreate}>
+                <Plus className="mr-1 h-4 w-4" /> New Product
+              </Button>
+            }
+          />
         ) : (
           <Table>
             <TableHeader>
@@ -260,7 +268,7 @@ export function SupplierProductsClient() {
 
         {total > limit && (
           <div className="pt-3">
-            <Pagination total={total} limit={limit} offset={offset} onPage={setOffset} onPageSize={setLimit} />
+            <Pagination total={total} limit={limit} offset={offset} onPageChange={setOffset} onLimitChange={setLimit} />
           </div>
         )}
       </div>
@@ -306,15 +314,22 @@ export function SupplierProductsClient() {
 
             <FormField label="Supplier" error={fieldErrors.supplierId}>
               <Typeahead
-                value={form.supplierQuery}
-                onChange={setSupplierLookupQ}
-                onSelect={(item: SupplierOption) => {
-                  setField("supplierId", String(item.id));
-                  setField("supplierQuery", item.companyName);
+                value={form.supplierId}
+                inputValue={form.supplierQuery}
+                onInputValueChange={(v) => {
+                  setSupplierLookupQ(v);
+                  setField("supplierQuery", v);
+                  setField("supplierId", "");
                 }}
-                onClear={() => { setField("supplierId", ""); setField("supplierQuery", ""); }}
-                items={(suppliers?.rows ?? []) as SupplierOption[]}
-                getLabel={(s) => s.companyName}
+                onSelect={(option) => {
+                  setField("supplierId", option.value);
+                  setField("supplierQuery", option.label);
+                }}
+                options={(suppliers?.rows ?? []).map((s) => ({
+                  value: String(s.id),
+                  label: s.companyName,
+                  secondary: s.code,
+                }))}
                 placeholder="Search supplier…"
               />
             </FormField>
@@ -385,10 +400,13 @@ export function SupplierProductsClient() {
 
       <ConfirmDialog
         open={!!confirmDelete}
+        onOpenChange={(v) => !v && setConfirmDelete(null)}
         title="Delete Supplier Product?"
         description={`Delete "${confirmDelete?.name}" (${confirmDelete?.code})? This cannot be undone.`}
-        onConfirm={() => confirmDelete && handleDelete(confirmDelete)}
-        onCancel={() => setConfirmDelete(null)}
+        onConfirm={async () => {
+          if (!confirmDelete) return;
+          await handleDelete(confirmDelete);
+        }}
       />
     </>
   );

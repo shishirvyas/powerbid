@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
       })
       .returning();
 
-    return jsonOk(row, 201);
+    return jsonOk(row, { status: 201 });
   } catch (err) {
     return errorToResponse(err);
   }
