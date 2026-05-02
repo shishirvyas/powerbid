@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { purchaseOrders, suppliers } from "@/lib/db/schema";
+import { bomMaster, purchaseOrders, salesOrders, suppliers } from "@/lib/db/schema";
 import {
   ApiError,
   errorToResponse,
@@ -47,7 +47,9 @@ export async function GET(req: NextRequest) {
         supplierName: suppliers.companyName,
         supplierId: purchaseOrders.supplierId,
         soId: purchaseOrders.soId,
+        soNumber: salesOrders.soNumber,
         bomId: purchaseOrders.bomId,
+        bomCode: bomMaster.bomCode,
         expectedDate: purchaseOrders.expectedDate,
         status: purchaseOrders.status,
         grandTotal: purchaseOrders.grandTotal,
@@ -56,6 +58,8 @@ export async function GET(req: NextRequest) {
       })
       .from(purchaseOrders)
       .leftJoin(suppliers, eq(purchaseOrders.supplierId, suppliers.id))
+      .leftJoin(salesOrders, eq(purchaseOrders.soId, salesOrders.id))
+      .leftJoin(bomMaster, eq(purchaseOrders.bomId, bomMaster.id))
       .where(where)
       .orderBy(desc(purchaseOrders.createdAt))
       .limit(limit)
@@ -77,6 +81,9 @@ export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
     const data = await parseJson(req, purchaseOrderSchema);
+    if (data.status === "approved" || data.status === "sent") {
+      throw new ApiError(400, "Use approval and dispatch actions to move PO to approved/sent");
+    }
     
     // Calculate totals on backend too to ensure integrity
     const { calcPurchaseOrder } = await import("@/lib/calc");

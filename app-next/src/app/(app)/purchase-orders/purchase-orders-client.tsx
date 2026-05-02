@@ -33,6 +33,10 @@ type PurchaseOrder = {
   grandTotal: string;
   supplierId: number;
   supplierName: string | null;
+  soId: number | null;
+  soNumber: string | null;
+  bomId: number | null;
+  bomCode: string | null;
   createdAt: string;
 };
 
@@ -119,6 +123,8 @@ export function PurchaseOrdersClient() {
                 <TableHead>PO Number</TableHead>
                 <TableHead className="hidden md:table-cell">Expected Date</TableHead>
                 <TableHead>Supplier</TableHead>
+                <TableHead className="hidden lg:table-cell">Linked SO</TableHead>
+                <TableHead className="hidden lg:table-cell">Linked BOM</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Total</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -126,7 +132,7 @@ export function PurchaseOrdersClient() {
             </TableHeader>
             <TableBody>
               {loading && !data ? (
-                <TableSkeleton cols={6} rows={5} />
+                <TableSkeleton cols={8} rows={5} />
               ) : (
                 data?.rows.map((row) => (
                   <TableRow
@@ -140,6 +146,8 @@ export function PurchaseOrdersClient() {
                     <TableCell className="font-mono text-xs">{row.poNumber}</TableCell>
                     <TableCell className="hidden md:table-cell text-sm">{formatDate(row.expectedDate)}</TableCell>
                     <TableCell className="font-medium">{row.supplierName || "—"}</TableCell>
+                    <TableCell className="hidden lg:table-cell font-mono text-xs">{row.soNumber || (row.soId ? `SO-${row.soId}` : "—")}</TableCell>
+                    <TableCell className="hidden lg:table-cell font-mono text-xs">{row.bomCode || (row.bomId ? `BOM-${row.bomId}` : "—")}</TableCell>
                     <TableCell>
                       <Badge variant="outline">{row.status.replace("_", " ").toUpperCase()}</Badge>
                     </TableCell>

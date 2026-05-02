@@ -16,6 +16,7 @@ const createSchema = z.object({
 
 const actionSchema = z.object({
   status: z.enum(["approved", "rejected"]),
+  mode: z.enum(["workflow", "self_with_scan"]).optional(),
   comments: z.string().trim().max(500).optional().or(z.literal("")),
 });
 
@@ -25,7 +26,15 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     const id = parseId((await ctx.params).id);
 
     const [po] = await db
-      .select({ id: purchaseOrders.id, status: purchaseOrders.status })
+      .select({
+        id: purchaseOrders.id,
+        status: purchaseOrders.status,
+        approvalMode: purchaseOrders.approvalMode,
+        approvedAt: purchaseOrders.approvedAt,
+        approvedBy: purchaseOrders.approvedBy,
+        selfApprovalScanName: purchaseOrders.selfApprovalScanName,
+        selfApprovalScanPath: purchaseOrders.selfApprovalScanPath,
+      })
       .from(purchaseOrders)
       .where(eq(purchaseOrders.id, id));
     if (!po) throw new ApiError(404, "Purchase Order not found");
@@ -50,7 +59,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
     const approvers = await db
       .select({ id: users.id, name: users.name, email: users.email, role: users.role })
       .from(users)
-      .where(and(eq(users.isActive, true), inArray(users.role, ["admin", "sales"])))
+      .where(and(eq(users.isActive, true), inArray(users.role, ["admin", "sales", "procurement"])))
       .orderBy(asc(users.name));
 
     return jsonOk({
@@ -68,7 +77,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 export async function POST(req: NextRequest, ctx: Ctx) {
   try {
     const session = await requireSession();
-    if (session.role === "viewer") throw new ApiError(403, "Only sales/admin users can submit approvals");
+    if (session.role === "viewer") throw new ApiError(403, "Only purchase/admin/sales users can submit approvals");
     const id = parseId((await ctx.params).id);
     const payload = await parseJson(req, createSchema);
 
@@ -98,7 +107,14 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 
       await tx
         .update(purchaseOrders)
-        .set({ status: "pending_approval", updatedAt: new Date(), updatedBy: session.userId })
+        .set({
+          status: "pending_approval",
+          approvalMode: "workflow",
+          approvedAt: null,
+          approvedBy: null,
+          updatedAt: new Date(),
+          updatedBy: session.userId,
+        })
         .where(eq(purchaseOrders.id, id));
     });
 
@@ -114,6 +130,72 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     if (session.role === "viewer") throw new ApiError(403, "Viewer users cannot action approvals");
     const id = parseId((await ctx.params).id);
     const payload = await parseJson(req, actionSchema);
+
+    if (payload.status === "approved" && payload.mode === "self_with_scan") {
+      const [po] = await db
+        .select({
+          id: purchaseOrders.id,
+          status: purchaseOrders.status,
+          selfApprovalScanPath: purchaseOrders.selfApprovalScanPath,
+        })
+        .from(purchaseOrders)
+        .where(eq(purchaseOrders.id, id))
+        .limit(1);
+
+      if (!po) throw new ApiError(404, "Purchase Order not found");
+      if (!po.selfApprovalScanPath) {
+        throw new ApiError(400, "Upload signed approval scan before self-approval");
+      }
+      if (po.status === "sent" || po.status === "partial_received" || po.status === "closed" || po.status === "cancelled") {
+        throw new ApiError(409, "Closed/sent purchase orders cannot be approved");
+      }
+      if (po.status === "approved") {
+        throw new ApiError(409, "Purchase Order is already approved");
+      }
+
+      await db.transaction(async (tx) => {
+        const [existingSelfApproval] = await tx
+          .select({ id: purchaseApprovals.id })
+          .from(purchaseApprovals)
+          .where(and(eq(purchaseApprovals.poId, id), eq(purchaseApprovals.approverId, session.userId)))
+          .limit(1);
+
+        if (existingSelfApproval) {
+          await tx
+            .update(purchaseApprovals)
+            .set({
+              status: "approved",
+              comments: payload.comments || "Self-approved with signed scan",
+              approvedAt: new Date(),
+            })
+            .where(eq(purchaseApprovals.id, existingSelfApproval.id));
+        } else {
+          await tx
+            .insert(purchaseApprovals)
+            .values({
+              poId: id,
+              approverId: session.userId,
+              status: "approved",
+              comments: payload.comments || "Self-approved with signed scan",
+              approvedAt: new Date(),
+            });
+        }
+
+        await tx
+          .update(purchaseOrders)
+          .set({
+            status: "approved",
+            approvalMode: "self_with_scan",
+            approvedAt: new Date(),
+            approvedBy: session.userId,
+            updatedAt: new Date(),
+            updatedBy: session.userId,
+          })
+          .where(eq(purchaseOrders.id, id));
+      });
+
+      return jsonOk({ ok: true });
+    }
 
     const [myApproval] = await db
       .select({
@@ -146,7 +228,14 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       if (poStatus) {
         await tx
           .update(purchaseOrders)
-          .set({ status: poStatus, updatedAt: new Date(), updatedBy: session.userId })
+          .set({
+            status: poStatus,
+            approvalMode: "workflow",
+            approvedAt: poStatus === "approved" ? new Date() : null,
+            approvedBy: poStatus === "approved" ? session.userId : null,
+            updatedAt: new Date(),
+            updatedBy: session.userId,
+          })
           .where(eq(purchaseOrders.id, id));
       }
     });

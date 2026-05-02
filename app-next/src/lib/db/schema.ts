@@ -501,6 +501,12 @@ export const purchaseOrders = pgTable(
     remarks: text("remarks"),
     termsConditions: text("terms_conditions"),
     paymentTerms: text("payment_terms"),
+    approvalMode: text("approval_mode").notNull().default("workflow"), // workflow/self_with_scan
+    approvedBy: integer("approved_by").references(() => users.id, { onDelete: "set null" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    selfApprovalScanName: text("self_approval_scan_name"),
+    selfApprovalScanPath: text("self_approval_scan_path"),
+    selfApprovalScanUploadedBy: integer("self_approval_scan_uploaded_by").references(() => users.id, { onDelete: "set null" }),
     soId: integer("so_id").references(() => salesOrders.id, { onDelete: "set null" }),
     bomId: integer("bom_id").references(() => bomMaster.id, { onDelete: "set null" }),
     createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),

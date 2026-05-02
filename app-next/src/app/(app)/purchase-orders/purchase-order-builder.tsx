@@ -378,8 +378,6 @@ export function PurchaseOrderBuilder({ initial, mode }: { initial: POBuilderInit
             <Select value={form.status} onChange={e => setForm(f => ({...f, status: e.target.value as any}))}>
               <option value="draft">Draft</option>
               <option value="pending_approval">Pending Approval</option>
-              <option value="approved">Approved</option>
-              <option value="sent">Sent</option>
               <option value="closed">Closed</option>
               <option value="cancelled">Cancelled</option>
             </Select>

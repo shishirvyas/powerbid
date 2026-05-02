@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, Download, Loader2, Mail, MessageCircle, Pencil, Printer, Send, ShieldCheck, ShieldX } from "lucide-react";
+import { ArrowLeft, Download, Loader2, Mail, MessageCircle, Pencil, Printer, Send, ShieldCheck, ShieldX, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -16,8 +16,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 type PoDetail = {
   id: number;
   poNumber: string;
+  soId: number | null;
+  bomId: number | null;
   expectedDate: string | null;
   status: string;
+  approvalMode: string;
+  approvedBy: number | null;
+  approvedAt: string | null;
+  selfApprovalScanName: string | null;
+  selfApprovalScanPath: string | null;
   currency: string;
   subtotal: string;
   taxableAmount: string;
@@ -84,7 +91,8 @@ export default function PurchaseOrderDetailClient({ id }: { id: string }) {
   const { data: approvals, refresh: refreshApprovals } = useResource<ApprovalData>(`/api/purchase-orders/${id}/approval`);
 
   const [sending, setSending] = React.useState<"email" | "whatsapp" | null>(null);
-  const [acting, setActing] = React.useState<"submit" | "approve" | "reject" | null>(null);
+  const [acting, setActing] = React.useState<"submit" | "approve" | "reject" | "self_approve" | null>(null);
+  const [scanUploading, setScanUploading] = React.useState(false);
   const [selectedApproverIds, setSelectedApproverIds] = React.useState<number[]>([]);
 
   React.useEffect(() => {
@@ -180,6 +188,45 @@ export default function PurchaseOrderDetailClient({ id }: { id: string }) {
     }
   }
 
+  async function uploadSelfApprovalScan(file: File | null) {
+    if (!file) return;
+    try {
+      setScanUploading(true);
+      const body = new FormData();
+      body.append("file", file);
+      await api(`/api/purchase-orders/${id}/approval-scan`, { method: "POST", body });
+      toast.success("Signed approval scan uploaded");
+      refresh();
+      refreshApprovals();
+    } catch (e) {
+      toast.error(e instanceof ApiClientError ? e.message : "Scan upload failed");
+    } finally {
+      setScanUploading(false);
+    }
+  }
+
+  async function selfApproveWithScan() {
+    if (!data?.selfApprovalScanPath) {
+      toast.error("Upload signed approval scan before self-approval");
+      return;
+    }
+    try {
+      setActing("self_approve");
+      const comments = window.prompt("Self-approval comments (optional)") || undefined;
+      await api(`/api/purchase-orders/${id}/approval`, {
+        method: "PATCH",
+        json: { status: "approved", mode: "self_with_scan", comments },
+      });
+      toast.success("PO self-approved with scan");
+      refresh();
+      refreshApprovals();
+    } catch (e) {
+      toast.error(e instanceof ApiClientError ? e.message : "Self-approval failed");
+    } finally {
+      setActing(null);
+    }
+  }
+
   if (error) {
     return <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</div>;
   }
@@ -188,7 +235,7 @@ export default function PurchaseOrderDetailClient({ id }: { id: string }) {
   }
 
   const myPendingApproval = approvals?.approvals.find((a) => a.approverId === approvals.me && a.status === "pending");
-  const canSubmitApproval = approvals?.meRole === "admin" || approvals?.meRole === "sales";
+  const canSubmitApproval = approvals?.meRole === "admin" || approvals?.meRole === "sales" || approvals?.meRole === "procurement";
 
   function toggleApprover(userId: number) {
     setSelectedApproverIds((prev) => {
@@ -219,10 +266,10 @@ export default function PurchaseOrderDetailClient({ id }: { id: string }) {
                 <Download className="h-4 w-4" /> Download PDF
               </Link>
             </Button>
-            <Button variant="outline" onClick={sendEmail} disabled={sending !== null}>
+            <Button variant="outline" onClick={sendEmail} disabled={sending !== null || data.status !== "approved"}>
               {sending === "email" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />} Send Email
             </Button>
-            <Button variant="outline" onClick={sendWhatsApp} disabled={sending !== null}>
+            <Button variant="outline" onClick={sendWhatsApp} disabled={sending !== null || data.status !== "approved"}>
               {sending === "whatsapp" ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />} Send WhatsApp
             </Button>
             {canSubmitApproval ? (
@@ -269,6 +316,10 @@ export default function PurchaseOrderDetailClient({ id }: { id: string }) {
           </CardHeader>
           <CardContent>
             <Badge variant={statusVariant(data.status)}>{data.status.replaceAll("_", " ")}</Badge>
+            <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+              <div>Linked SO: {data.soId ? `SO-${data.soId}` : "—"}</div>
+              <div>Linked BOM: {data.bomId ? `BOM-${data.bomId}` : "—"}</div>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -340,6 +391,38 @@ export default function PurchaseOrderDetailClient({ id }: { id: string }) {
           <CardTitle className="text-base">Approval Matrix</CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 rounded-md border bg-muted/30 p-3">
+            <div className="mb-2 text-sm font-medium">Self Approval With Signed Scan</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                <Upload className="h-4 w-4" />
+                Upload Signed Scan
+                <input
+                  type="file"
+                  className="hidden"
+                  accept=".pdf,.png,.jpg,.jpeg,.webp"
+                  onChange={(e) => {
+                    void uploadSelfApprovalScan(e.currentTarget.files?.[0] ?? null);
+                    e.currentTarget.value = "";
+                  }}
+                />
+              </label>
+              <Button
+                variant="outline"
+                onClick={selfApproveWithScan}
+                disabled={acting !== null || !data.selfApprovalScanPath || data.status === "approved"}
+              >
+                {acting === "self_approve" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Self Approve
+              </Button>
+              {scanUploading ? <span className="text-xs text-muted-foreground">Uploading...</span> : null}
+            </div>
+            <div className="mt-2 text-xs text-muted-foreground">
+              {data.selfApprovalScanName
+                ? `Uploaded scan: ${data.selfApprovalScanName}`
+                : "No signed scan uploaded yet"}
+            </div>
+          </div>
+
           {approvals && canSubmitApproval ? (
             <div className="mb-4 rounded-md border bg-muted/40 p-3">
               <div className="mb-2 text-sm font-medium">Select Approvers</div>

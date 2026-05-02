@@ -28,6 +28,11 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
         bomId: purchaseOrders.bomId,
         expectedDate: purchaseOrders.expectedDate,
         status: purchaseOrders.status,
+        approvalMode: purchaseOrders.approvalMode,
+        approvedBy: purchaseOrders.approvedBy,
+        approvedAt: purchaseOrders.approvedAt,
+        selfApprovalScanName: purchaseOrders.selfApprovalScanName,
+        selfApprovalScanPath: purchaseOrders.selfApprovalScanPath,
         currency: purchaseOrders.currency,
         discountType: purchaseOrders.discountType,
         discountValue: purchaseOrders.discountValue,
@@ -72,6 +77,9 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
     const session = await requireSession();
     const id = parseId((await ctx.params).id);
     const data = await parseJson(req, purchaseOrderSchema);
+    if (data.status === "approved" || data.status === "sent") {
+      throw new ApiError(400, "Use approval and dispatch actions to move PO to approved/sent");
+    }
 
     const { calcPurchaseOrder } = await import("@/lib/calc");
     const calc = calcPurchaseOrder(data);

@@ -66,11 +66,19 @@ export async function POST(req: NextRequest, ctx: Ctx) {
         id: purchaseOrders.id,
         poNumber: purchaseOrders.poNumber,
         status: purchaseOrders.status,
+        approvalMode: purchaseOrders.approvalMode,
+        selfApprovalScanPath: purchaseOrders.selfApprovalScanPath,
         supplierId: purchaseOrders.supplierId,
       })
       .from(purchaseOrders)
       .where(eq(purchaseOrders.id, id));
     if (!po) throw new ApiError(404, "Purchase Order not found");
+    if (po.status !== "approved") {
+      throw new ApiError(409, "Purchase Order must be approved before supplier dispatch");
+    }
+    if (po.approvalMode === "self_with_scan" && !po.selfApprovalScanPath) {
+      throw new ApiError(409, "Self-approved PO requires signed scan before supplier dispatch");
+    }
 
     const [supplier] = await db
       .select({

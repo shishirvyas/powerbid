@@ -1,6 +1,6 @@
 # PowerBid Feature Guide
 
-Last updated: 2026-05-03 (SO detail edit, BOM SO context panel)
+Last updated: 2026-05-02 (PO workflow test + linked BOM/SO visibility)
 Owner: GitHub Copilot (with developer updates)
 
 ## Purpose
@@ -274,6 +274,8 @@ Also update the `Last updated` date and add a short entry to the change log sect
 - Confirm loading states, pagination, and route transitions on large datasets.
 
 ## Change Log
+- 2026-05-02: Improved PO traceability in UI. `/purchase-orders` list now shows Linked SO and Linked BOM columns (reads SO number and BOM code from API joins). PO detail page now shows linked SO/BOM IDs in the status panel. Added repeatable test seeding script `app-next/scripts/seed-po-workflow-test.js` to create a deterministic PO (`PO-2026-TST001`) linked to BOM `id=6` for workflow verification.
+- 2026-05-02: Enforced Purchase Order approval workflow before supplier dispatch. PO email/WhatsApp dispatch now requires `status=approved`. Added self-approval path with mandatory signed-scan upload: new endpoint `POST /api/purchase-orders/[id]/approval-scan`, PO fields for `approvalMode`, `approvedBy/approvedAt`, and scan metadata (`selfApprovalScanName/selfApprovalScanPath`). Added migration `0013_po_self_approval_scan.sql`. PO detail page now supports signed scan upload + `Self Approve` action (`mode=self_with_scan`). PO builder no longer exposes direct `approved/sent` status selection; API rejects direct create/update attempts to set `approved/sent`.
 - 2026-05-01: Initial `features.md` created with baseline feature inventory and testing focus points.
 - 2026-05-01: Added planned Workflow Engine feature section for order, BOM, and procurement lifecycle orchestration.
 - 2026-05-01: Implemented config-driven Workflow Engine backend module and APIs (create workflow, transition, versioning, history).
