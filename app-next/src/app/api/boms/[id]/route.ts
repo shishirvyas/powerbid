@@ -2,7 +2,7 @@ import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { calcBomRollup } from "@/lib/calc";
 import { db } from "@/lib/db";
-import { bomItems, bomMaster, products, purchaseOrderItems } from "@/lib/db/schema";
+import { bomItems, bomMaster, products, purchaseOrderItems, salesOrders, supplierProducts } from "@/lib/db/schema";
 import { ApiError, errorToResponse, jsonOk, parseId, parseJson, requireSession } from "@/lib/api";
 import { bomMasterSchema } from "@/lib/schemas";
 
@@ -19,6 +19,8 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       .select({
         id: bomMaster.id,
         productId: bomMaster.productId,
+        soId: bomMaster.soId,
+        soNumber: salesOrders.soNumber,
         bomCode: bomMaster.bomCode,
         version: bomMaster.version,
         isActive: bomMaster.isActive,
@@ -32,27 +34,35 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       })
       .from(bomMaster)
       .innerJoin(products, eq(bomMaster.productId, products.id))
+      .leftJoin(salesOrders, eq(bomMaster.soId, salesOrders.id))
       .where(eq(bomMaster.id, id));
 
     if (!master) throw new ApiError(404, "BOM not found");
 
-    const items = await db
+    // Items: left-join both products (raw material) and supplier_products
+    const itemsAlias = db
       .select({
         id: bomItems.id,
         rawMaterialId: bomItems.rawMaterialId,
-        rawMaterialName: products.name,
-        rawMaterialSku: products.sku,
+        supplierProductId: bomItems.supplierProductId,
+        supplierProductName: supplierProducts.name,
+        supplierProductCode: supplierProducts.code,
         qtyPerUnit: bomItems.qtyPerUnit,
         unitName: bomItems.unitName,
         wastagePercent: bomItems.wastagePercent,
         notes: bomItems.notes,
+        rawMaterialName: products.name,
+        rawMaterialSku: products.sku,
       })
       .from(bomItems)
-      .innerJoin(products, eq(bomItems.rawMaterialId, products.id))
+      .leftJoin(products, eq(bomItems.rawMaterialId, products.id))
+      .leftJoin(supplierProducts, eq(bomItems.supplierProductId, supplierProducts.id))
       .where(eq(bomItems.bomId, id))
       .orderBy(desc(bomItems.id));
 
-    const rawMaterialIds = Array.from(new Set(items.map((it) => it.rawMaterialId)));
+    const items = await itemsAlias;
+
+    const rawMaterialIds = Array.from(new Set(items.map((it) => it.rawMaterialId).filter((id): id is number => id != null)));
     let rates: Record<number, number> = {};
     if (rawMaterialIds.length > 0) {
       const latestRates = await db
@@ -68,11 +78,11 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 
     const rollup = calcBomRollup({
       lines: items.map((it) => ({
-        rawMaterialId: it.rawMaterialId,
+        rawMaterialId: it.rawMaterialId ?? 0,
         rawMaterialName: it.rawMaterialName,
         qtyPerUnit: Number(it.qtyPerUnit),
         wastagePercent: Number(it.wastagePercent),
-        estimatedRate: rates[it.rawMaterialId] || 0,
+        estimatedRate: rates[it.rawMaterialId ?? 0] || 0,
       })),
       laborCost: Number(master.laborCost),
       overheadCost: Number(master.overheadCost),
@@ -80,7 +90,7 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 
     return jsonOk({
       ...master,
-      items: items.map((it) => ({ ...it, estimatedRate: rates[it.rawMaterialId] || 0 })),
+      items: items.map((it) => ({ ...it, estimatedRate: rates[it.rawMaterialId ?? 0] || 0 })),
       rollup,
     });
   } catch (err) {
@@ -110,6 +120,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
         .update(bomMaster)
         .set({
           productId: data.productId,
+          soId: data.soId ?? null,
           bomCode: data.bomCode,
           version: data.version,
           isActive: data.isActive,
@@ -125,7 +136,8 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
       await tx.insert(bomItems).values(
         data.items.map((it) => ({
           bomId: id,
-          rawMaterialId: it.rawMaterialId,
+          rawMaterialId: it.rawMaterialId ?? null,
+          supplierProductId: it.supplierProductId ?? null,
           qtyPerUnit: it.qtyPerUnit.toString(),
           unitName: it.unitName,
           wastagePercent: it.wastagePercent.toString(),

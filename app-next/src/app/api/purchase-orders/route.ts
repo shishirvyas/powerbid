@@ -5,7 +5,7 @@ import { purchaseOrders, suppliers } from "@/lib/db/schema";
 import {
   ApiError,
   errorToResponse,
-  jsonOk,
+  jsonOk, jsonList,
   parseJson,
   parseSearch,
   requireSession,
@@ -45,9 +45,13 @@ export async function GET(req: NextRequest) {
         id: purchaseOrders.id,
         poNumber: purchaseOrders.poNumber,
         supplierName: suppliers.companyName,
+        supplierId: purchaseOrders.supplierId,
+        soId: purchaseOrders.soId,
+        bomId: purchaseOrders.bomId,
         expectedDate: purchaseOrders.expectedDate,
         status: purchaseOrders.status,
         grandTotal: purchaseOrders.grandTotal,
+        currency: purchaseOrders.currency,
         createdAt: purchaseOrders.createdAt,
       })
       .from(purchaseOrders)
@@ -63,7 +67,7 @@ export async function GET(req: NextRequest) {
       .leftJoin(suppliers, eq(purchaseOrders.supplierId, suppliers.id))
       .where(where);
 
-    return jsonOk({ rows, total: count, limit, offset });
+    return jsonList({ rows, total: count, limit, offset });
   } catch (err) {
     return errorToResponse(err);
   }
@@ -91,6 +95,8 @@ export async function POST(req: NextRequest) {
             .values({
               poNumber,
               supplierId: data.supplierId,
+              soId: data.soId ?? null,
+              bomId: data.bomId ?? null,
               expectedDate: data.expectedDate,
               status: data.status,
               currency: data.currency,

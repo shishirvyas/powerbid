@@ -141,7 +141,7 @@ export class ChangePropagationService {
       .from(bomItems)
       .where(eq(bomItems.bomId, bomId));
 
-    const materialProductIds = materials.map((m) => m.rawMaterialId);
+    const materialProductIds = materials.map((m) => m.rawMaterialId).filter((id): id is number => id != null);
 
     // 2c. Purchase orders whose items include any of those products
     let poImpacts: { id: number; status: string }[] = [];

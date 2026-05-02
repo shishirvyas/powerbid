@@ -11,6 +11,7 @@ import {
   requireSession,
 } from "@/lib/api";
 import { inquirySchema } from "@/lib/schemas";
+import { runIdempotentMutation } from "@/lib/idempotency";
 
 export const runtime = "nodejs";
 
@@ -51,30 +52,39 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
 
 export async function PUT(req: NextRequest, ctx: Ctx) {
   try {
-    await requireSession();
+    const session = await requireSession();
     const id = parseId((await ctx.params).id);
     const data = await parseJson(req, inquirySchema);
-    const { items, ...rest } = data;
-    const [row] = await db
-      .update(inquiries)
-      .set({ ...rest, updatedAt: new Date() })
-      .where(eq(inquiries.id, id))
-      .returning();
-    if (!row) throw new ApiError(404, "Inquiry not found");
-    await db.delete(inquiryItems).where(eq(inquiryItems.inquiryId, id));
-    if (items.length) {
-      await db.insert(inquiryItems).values(
-        items.map((it) => ({
-          inquiryId: id,
-          productId: it.productId ?? null,
-          productName: it.productName,
-          unitName: it.unitName ?? null,
-          qty: String(it.qty),
-          remarks: it.remarks ?? null,
-        })),
-      );
-    }
-    return jsonOk(row);
+    return await runIdempotentMutation(
+      {
+        req,
+        userId: session.userId,
+        fingerprint: { id, data },
+      },
+      async () => {
+        const { items, ...rest } = data;
+        const [row] = await db
+          .update(inquiries)
+          .set({ ...rest, updatedAt: new Date() })
+          .where(eq(inquiries.id, id))
+          .returning();
+        if (!row) throw new ApiError(404, "Inquiry not found");
+        await db.delete(inquiryItems).where(eq(inquiryItems.inquiryId, id));
+        if (items.length) {
+          await db.insert(inquiryItems).values(
+            items.map((it) => ({
+              inquiryId: id,
+              productId: it.productId ?? null,
+              productName: it.productName,
+              unitName: it.unitName ?? null,
+              qty: String(it.qty),
+              remarks: it.remarks ?? null,
+            })),
+          );
+        }
+        return { data: row };
+      },
+    );
   } catch (err) {
     return errorToResponse(err);
   }
@@ -82,11 +92,20 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
 
 export async function DELETE(_req: NextRequest, ctx: Ctx) {
   try {
-    await requireSession();
+    const session = await requireSession();
     const id = parseId((await ctx.params).id);
-    const [row] = await db.delete(inquiries).where(eq(inquiries.id, id)).returning();
-    if (!row) throw new ApiError(404, "Inquiry not found");
-    return jsonOk({ ok: true });
+    return await runIdempotentMutation(
+      {
+        req: _req,
+        userId: session.userId,
+        fingerprint: { id },
+      },
+      async () => {
+        const [row] = await db.delete(inquiries).where(eq(inquiries.id, id)).returning();
+        if (!row) throw new ApiError(404, "Inquiry not found");
+        return { data: { ok: true } };
+      },
+    );
   } catch (err) {
     return errorToResponse(err);
   }

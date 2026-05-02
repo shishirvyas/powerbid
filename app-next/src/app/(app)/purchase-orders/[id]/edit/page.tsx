@@ -23,6 +23,8 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const initial: POBuilderInitial = {
     id: po.id,
     supplierId: po.supplierId,
+    soId: po.soId ?? null,
+    bomId: po.bomId ?? null,
     expectedDate: po.expectedDate || "",
     status: po.status as POBuilderInitial["status"],
     currency: po.currency,

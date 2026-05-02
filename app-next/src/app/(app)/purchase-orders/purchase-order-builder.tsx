@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Download, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -46,10 +46,14 @@ type ProductOption = {
   unitName: string | null;
 };
 type GstSlabOption = { id: number; name: string; rate: string; isActive: boolean };
+type BomOption = { id: number; bomCode: string; version: string; soId: number | null };
+type SalesOrderOption = { id: number; soNumber: string; customerName: string | null };
 
 export type POBuilderInitial = {
   id?: number;
   supplierId: number | null;
+  soId: number | null;
+  bomId: number | null;
   expectedDate: string;
   status: "draft" | "pending_approval" | "approved" | "sent" | "partial_received" | "closed" | "cancelled";
   currency: string;
@@ -79,6 +83,8 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 export const blankInitial: POBuilderInitial = {
   supplierId: null,
+  soId: null,
+  bomId: null,
   expectedDate: today(),
   status: "draft",
   currency: "INR",
@@ -131,8 +137,11 @@ export function PurchaseOrderBuilder({ initial, mode }: { initial: POBuilderInit
   const [form, setForm] = React.useState<POBuilderInitial>(initial);
   const [supplierQuery, setSupplierQuery] = React.useState("");
   const [productLookupQuery, setProductLookupQuery] = React.useState("");
+  const [soLookupQuery, setSoLookupQuery] = React.useState("");
+  const [bomImporting, setBomImporting] = React.useState(false);
   const supplierLookupQ = useDebounced(supplierQuery, 250);
   const productLookupQ = useDebounced(productLookupQuery, 250);
+  const soLookupQ = useDebounced(soLookupQuery, 250);
   const [saving, setSaving] = React.useState(false);
   const { errors, set: setErrors, setOne } = useFieldErrors();
   const [itemErrors, setItemErrors] = React.useState<Record<number, Record<string, string>>>({});
@@ -140,6 +149,14 @@ export function PurchaseOrderBuilder({ initial, mode }: { initial: POBuilderInit
   const { data: suppliers } = useList<SupplierOption>("/api/suppliers", { q: supplierLookupQ, limit: 100 });
   const { data: products } = useList<ProductOption>("/api/products", { q: productLookupQ, limit: 100 });
   const { data: masters } = useResource<{ gstSlabs: GstSlabOption[] }>("/api/masters");
+  const { data: salesOrders } = useList<SalesOrderOption>("/api/sales-orders", { q: soLookupQ, limit: 50 });
+  const { data: bomsData } = useList<BomOption>("/api/boms", { limit: 200 });
+
+  // Filter BOMs by selected SO
+  const bomOptions = React.useMemo(
+    () => (bomsData?.rows || []).filter((b) => !form.soId || b.soId === form.soId),
+    [bomsData, form.soId],
+  );
 
   React.useEffect(() => {
     if (!suppliers?.rows || !form.supplierId) return;
@@ -232,6 +249,35 @@ export function PurchaseOrderBuilder({ initial, mode }: { initial: POBuilderInit
     return { fieldErrors, itemErrs };
   }
 
+  async function importFromBom() {
+    if (!form.bomId) return toast.error("Select a BOM to import from");
+    setBomImporting(true);
+    try {
+      const bom = await api<any>(`/api/boms/${form.bomId}`);
+      const supplierItems: BuilderItem[] = (bom.items || [])
+        .filter((it: any) => it.supplierProductId)
+        .map((it: any) => ({
+          productId: "",
+          productQuery: `${it.supplierProductCode || ""} - ${it.supplierProductName || ""}`,
+          productName: it.supplierProductName || "",
+          unitName: "",
+          qty: String(Math.ceil(it.qtyPerUnit)),
+          unitPrice: it.standardPrice ? String(it.standardPrice) : "0",
+          discountPercent: "0",
+          gstSlabId: "",
+          gstSlabQuery: "",
+          gstRate: "0",
+        }));
+      if (supplierItems.length === 0) return toast.error("No supplier products in this BOM");
+      setForm((f) => ({ ...f, items: supplierItems }));
+      toast.success(`Imported ${supplierItems.length} items from BOM`);
+    } catch {
+      toast.error("Failed to load BOM");
+    } finally {
+      setBomImporting(false);
+    }
+  }
+
   async function onSave() {
     const { fieldErrors, itemErrs } = clientValidate();
     if (Object.keys(fieldErrors).length || Object.keys(itemErrs).length) {
@@ -244,6 +290,8 @@ export function PurchaseOrderBuilder({ initial, mode }: { initial: POBuilderInit
     setSaving(true);
     const payload = {
       supplierId: form.supplierId,
+      soId: form.soId ?? null,
+      bomId: form.bomId ?? null,
       expectedDate: form.expectedDate,
       status: form.status,
       currency: "INR",
@@ -335,6 +383,29 @@ export function PurchaseOrderBuilder({ initial, mode }: { initial: POBuilderInit
               <option value="closed">Closed</option>
               <option value="cancelled">Cancelled</option>
             </Select>
+          </Field>
+          <Field label="Linked Sales Order (optional)">
+            <Typeahead
+              value={form.soId ? String(form.soId) : ""}
+              inputValue={form.soId ? (salesOrders?.rows.find(s => s.id === form.soId)?.soNumber ?? String(form.soId)) : ""}
+              onInputValueChange={(v) => { setSoLookupQuery(v); setForm(f => ({...f, soId: null, bomId: null})); }}
+              onSelect={(opt) => setForm(f => ({...f, soId: Number(opt.value), bomId: null}))}
+              options={(salesOrders?.rows ?? []).map(s => ({ value: String(s.id), label: `${s.soNumber}${s.customerName ? " — " + s.customerName : ""}` }))}
+              placeholder="Search SO…"
+            />
+          </Field>
+          <Field label="Linked BOM (optional)">
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <Select value={form.bomId ? String(form.bomId) : ""} onChange={e => setForm(f => ({...f, bomId: e.target.value ? Number(e.target.value) : null}))}>
+                  <option value="">— none —</option>
+                  {bomOptions.map(b => <option key={b.id} value={String(b.id)}>{b.bomCode} v{b.version}</option>)}
+                </Select>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={importFromBom} disabled={bomImporting || !form.bomId} title="Import supplier items from BOM">
+                <Download className="h-4 w-4" />
+              </Button>
+            </div>
           </Field>
         </CardContent>
       </Card>

@@ -18,6 +18,7 @@ import {
 import { generateQuotationReference } from "@/lib/quotation-reference";
 import { quotationSchema } from "@/lib/schemas";
 import { calcQuotation } from "@/lib/calc";
+import { runIdempotentMutation } from "@/lib/idempotency";
 
 export const runtime = "nodejs";
 
@@ -119,82 +120,91 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
     const session = await requireSession();
     const id = parseId((await ctx.params).id);
     const data = await parseJson(req, quotationSchema);
-    const [existing] = await db
-      .select({ id: quotations.id, referenceNo: quotations.referenceNo })
-      .from(quotations)
-      .where(eq(quotations.id, id));
-    if (!existing) throw new ApiError(404, "Quotation not found");
-    const calc = calcQuotation({
-      items: data.items,
-      discountType: "percent",
-      discountValue: 0,
-      freightAmount: 0,
-    });
-    const referenceNo = await generateQuotationReference({
-      customerId: data.customerId,
-      quotationDate: data.quotationDate,
-      quotationId: id,
-      currentReferenceNo: existing.referenceNo,
-    });
-    const [row] = await db
-      .update(quotations)
-      .set({
-        referenceNo,
-        quotationDate: data.quotationDate,
-        subject: data.subject ?? null,
-        projectName: data.projectName ?? null,
-        customerAttention: data.customerAttention ?? null,
-        introText: data.introText ?? null,
-        validityDays: data.validityDays,
-        customerId: data.customerId,
-        contactPersonId: data.contactPersonId ?? null,
-        inquiryId: data.inquiryId ?? null,
-        subjectTemplateId: data.subjectTemplateId ?? null,
-        status: "draft",
-        currency: "INR",
-        discountType: "percent",
-        discountValue: "0",
-        discountAmount: String(calc.discountAmount),
-        subtotal: String(calc.subtotal),
-        taxableAmount: String(calc.taxableAmount),
-        gstAmount: String(calc.gstAmount),
-        freightAmount: "0",
-        grandTotal: String(calc.grandTotal),
-        termsConditions: data.termsConditions ?? null,
-        paymentTerms: data.paymentTerms ?? null,
-        deliverySchedule: data.deliverySchedule ?? null,
-        notes: data.notes ?? null,
-        signatureMode: data.signatureMode ?? null,
-        signatureData: data.signatureData ?? null,
-        signatureName: data.signatureName ?? null,
-        signatureDesignation: data.signatureDesignation ?? null,
-        signatureMobile: data.signatureMobile ?? null,
-        signatureEmail: data.signatureEmail ?? null,
-        updatedBy: session.userId,
-        updatedAt: new Date(),
-      })
-      .where(eq(quotations.id, id))
-      .returning();
-    await db.delete(quotationItems).where(eq(quotationItems.quotationId, id));
-    await db.insert(quotationItems).values(
-      calc.lines.map((l, i) => ({
-        quotationId: id,
-        productId: l.productId ?? null,
-        productName: l.productName,
-        unitName: l.unitName ?? null,
-        qtyBreakup: null,
-        qty: String(l.qty),
-        unitPrice: String(l.unitPrice),
-        discountPercent: "0",
-        gstRate: String(l.gstRate),
-        gstSlabId: data.items[i]?.gstSlabId ?? null,
-        lineSubtotal: String(l.lineSubtotal),
-        lineGst: String(l.lineGst),
-        lineTotal: String(l.lineTotal),
-        sortOrder: i,
-      })),
+    return await runIdempotentMutation(
+      {
+        req,
+        userId: session.userId,
+        fingerprint: { id, data },
+      },
+      async () => {
+        const [existing] = await db
+          .select({ id: quotations.id, referenceNo: quotations.referenceNo })
+          .from(quotations)
+          .where(eq(quotations.id, id));
+        if (!existing) throw new ApiError(404, "Quotation not found");
+        const calc = calcQuotation({
+          items: data.items,
+          discountType: "percent",
+          discountValue: 0,
+          freightAmount: 0,
+        });
+        const referenceNo = await generateQuotationReference({
+          customerId: data.customerId,
+          quotationDate: data.quotationDate,
+          quotationId: id,
+          currentReferenceNo: existing.referenceNo,
+        });
+        const [row] = await db
+          .update(quotations)
+          .set({
+            referenceNo,
+            quotationDate: data.quotationDate,
+            subject: data.subject ?? null,
+            projectName: data.projectName ?? null,
+            customerAttention: data.customerAttention ?? null,
+            introText: data.introText ?? null,
+            validityDays: data.validityDays,
+            customerId: data.customerId,
+            contactPersonId: data.contactPersonId ?? null,
+            inquiryId: data.inquiryId ?? null,
+            subjectTemplateId: data.subjectTemplateId ?? null,
+            status: "draft",
+            currency: "INR",
+            discountType: "percent",
+            discountValue: "0",
+            discountAmount: String(calc.discountAmount),
+            subtotal: String(calc.subtotal),
+            taxableAmount: String(calc.taxableAmount),
+            gstAmount: String(calc.gstAmount),
+            freightAmount: "0",
+            grandTotal: String(calc.grandTotal),
+            termsConditions: data.termsConditions ?? null,
+            paymentTerms: data.paymentTerms ?? null,
+            deliverySchedule: data.deliverySchedule ?? null,
+            notes: data.notes ?? null,
+            signatureMode: data.signatureMode ?? null,
+            signatureData: data.signatureData ?? null,
+            signatureName: data.signatureName ?? null,
+            signatureDesignation: data.signatureDesignation ?? null,
+            signatureMobile: data.signatureMobile ?? null,
+            signatureEmail: data.signatureEmail ?? null,
+            updatedBy: session.userId,
+            updatedAt: new Date(),
+          })
+          .where(eq(quotations.id, id))
+          .returning();
+        await db.delete(quotationItems).where(eq(quotationItems.quotationId, id));
+        await db.insert(quotationItems).values(
+          calc.lines.map((l, i) => ({
+            quotationId: id,
+            productId: l.productId ?? null,
+            productName: l.productName,
+            unitName: l.unitName ?? null,
+            qtyBreakup: null,
+            qty: String(l.qty),
+            unitPrice: String(l.unitPrice),
+            discountPercent: "0",
+            gstRate: String(l.gstRate),
+            gstSlabId: data.items[i]?.gstSlabId ?? null,
+            lineSubtotal: String(l.lineSubtotal),
+            lineGst: String(l.lineGst),
+            lineTotal: String(l.lineTotal),
+            sortOrder: i,
+          })),
+        );
+        return { data: row };
+      },
     );
-    return jsonOk(row);
   } catch (err) {
     return errorToResponse(err);
   }
@@ -202,11 +212,20 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
 
 export async function DELETE(_req: NextRequest, ctx: Ctx) {
   try {
-    await requireSession();
+    const session = await requireSession();
     const id = parseId((await ctx.params).id);
-    const [row] = await db.delete(quotations).where(eq(quotations.id, id)).returning();
-    if (!row) throw new ApiError(404, "Quotation not found");
-    return jsonOk({ ok: true });
+    return await runIdempotentMutation(
+      {
+        req: _req,
+        userId: session.userId,
+        fingerprint: { id },
+      },
+      async () => {
+        const [row] = await db.delete(quotations).where(eq(quotations.id, id)).returning();
+        if (!row) throw new ApiError(404, "Quotation not found");
+        return { data: { ok: true } };
+      },
+    );
   } catch (err) {
     return errorToResponse(err);
   }

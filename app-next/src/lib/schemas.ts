@@ -120,6 +120,8 @@ export const purchaseOrderItemSchema = z.object({
 
 export const purchaseOrderSchema = z.object({
   supplierId: z.coerce.number().int().positive(),
+  soId: z.coerce.number().int().positive().nullable().optional(),
+  bomId: z.coerce.number().int().positive().nullable().optional(),
   expectedDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD")
@@ -171,8 +173,10 @@ export type StockMovementTxnInput = z.infer<typeof stockMovementTxnSchema>;
 
 /* ------------------------------ BOM ------------------------------------ */
 export const bomItemSchema = z.object({
-  rawMaterialId: z.coerce.number().int().positive(),
+  rawMaterialId: z.coerce.number().int().positive().nullable().optional(),
   rawMaterialName: optionalString,
+  supplierProductId: z.coerce.number().int().positive().nullable().optional(),
+  supplierProductName: optionalString,
   qtyPerUnit: z.coerce.number().positive(),
   unitName: optionalString,
   wastagePercent: z.coerce.number().min(0).max(100).default(0),
@@ -181,13 +185,14 @@ export const bomItemSchema = z.object({
 
 export const bomMasterSchema = z.object({
   productId: z.coerce.number().int().positive(),
+  soId: z.coerce.number().int().positive().nullable().optional(),
   bomCode: requiredString("BOM Code", 50),
   version: requiredString("Version", 20).default("1.0"),
   isActive: z.boolean().default(true),
   laborCost: z.coerce.number().min(0).default(0),
   overheadCost: z.coerce.number().min(0).default(0),
   notes: optionalString,
-  items: z.array(bomItemSchema).min(1, "Add at least one raw material"),
+  items: z.array(bomItemSchema).min(1, "Add at least one material"),
 });
 export type BomMasterInput = z.infer<typeof bomMasterSchema>;
 export type BomItemInput = z.infer<typeof bomItemSchema>;
@@ -387,6 +392,21 @@ export const gstSchema = z.object({
   rate: numericString,
   isActive: z.boolean().default(true),
 });
+
+/* -------------------------- supplier products -------------------------- */
+export const supplierProductSchema = z.object({
+  supplierId: z.coerce.number().int().positive().nullable().optional(),
+  code: requiredString("Code", 50),
+  name: requiredString("Name"),
+  description: optionalString,
+  unitId: z.coerce.number().int().positive().nullable().optional(),
+  unitName: optionalString,
+  standardPrice: z.coerce.number().min(0).default(0),
+  leadDays: z.coerce.number().int().min(0).default(0),
+  hsnCode: optionalString,
+  isActive: z.boolean().default(true),
+});
+export type SupplierProductInput = z.infer<typeof supplierProductSchema>;
 
 /* ----------------------------- list query ------------------------------ */
 export const listQuerySchema = z.object({

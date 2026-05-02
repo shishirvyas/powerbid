@@ -2,7 +2,7 @@ import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { bomItems, bomMaster, productionConsumption, productionOrders, products, warehouses } from "@/lib/db/schema";
-import { ApiError, errorToResponse, jsonOk, parseJson, parseSearch, requireSession } from "@/lib/api";
+import { ApiError, errorToResponse, jsonOk, jsonList, parseJson, parseSearch, requireSession } from "@/lib/api";
 import { listQuerySchema, productionOrderSchema } from "@/lib/schemas";
 
 export const runtime = "nodejs";
@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
       .leftJoin(bomMaster, eq(productionOrders.bomId, bomMaster.id))
       .where(where);
 
-    return jsonOk({ rows, total: count, limit, offset });
+    return jsonList({ rows, total: count, limit, offset });
   } catch (err) {
     return errorToResponse(err);
   }
@@ -89,14 +89,15 @@ export async function POST(req: NextRequest) {
           .where(eq(bomMaster.id, data.bomId));
         if (!bom) throw new ApiError(400, "BOM not found");
         if (bom.productId !== data.productId) throw new ApiError(400, "Selected BOM does not match product");
-        bomPlanItems = await tx
+        bomPlanItems = (await tx
           .select({
             rawMaterialId: bomItems.rawMaterialId,
             qtyPerUnit: bomItems.qtyPerUnit,
             wastagePercent: bomItems.wastagePercent,
           })
           .from(bomItems)
-          .where(eq(bomItems.bomId, data.bomId));
+          .where(eq(bomItems.bomId, data.bomId))
+        ).filter((it) => it.rawMaterialId != null) as { rawMaterialId: number; qtyPerUnit: string; wastagePercent: string; }[];
       }
 
       const [order] = await tx

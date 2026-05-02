@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Eye, Plus, Search, Trash2 } from "lucide-react";
+import { Eye, FileStack, Plus, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, EmptyState } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -164,7 +164,8 @@ export function SalesOrdersClient() {
                   <TableCell className="text-right tabular-nums">{formatCurrency(row.grandTotal, row.currency)}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
-                      <Button asChild variant="ghost" size="icon"><Link href={`/sales-orders/${row.id}`}><Eye className="h-4 w-4" /></Link></Button>
+                      <Button asChild variant="ghost" size="icon" title="View SO"><Link href={`/sales-orders/${row.id}`}><Eye className="h-4 w-4" /></Link></Button>
+                      <Button asChild variant="ghost" size="icon" title="New BOM for this SO"><Link href={`/boms?newBom=1&soId=${row.id}&soNumber=${encodeURIComponent(row.soNumber)}`}><FileStack className="h-4 w-4 text-primary" /></Link></Button>
                       <Button variant="ghost" size="icon" onClick={() => setConfirmDelete(row)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                     </div>
                   </TableCell>

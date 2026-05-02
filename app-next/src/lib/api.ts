@@ -18,6 +18,15 @@ export function jsonOk<T>(data: T, init?: ResponseInit) {
   return NextResponse.json(data, init);
 }
 
+/** Like jsonOk but adds stale-while-revalidate cache headers for list GETs */
+export function jsonList<T>(data: T, maxAge = 10, swr = 30) {
+  return NextResponse.json(data, {
+    headers: {
+      "Cache-Control": `private, max-age=${maxAge}, stale-while-revalidate=${swr}`,
+    },
+  });
+}
+
 export function jsonError(status: number, message: string, details?: unknown) {
   return NextResponse.json({ error: message, details }, { status });
 }

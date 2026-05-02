@@ -44,6 +44,25 @@
     --sidebar-border: 217 33% 22%;
 
     --radius: 0.875rem;
+
+    /* Sync status palette — desaturated, professional, ERP-grade.
+       Each status defines fg / bg / dot HSL triplets used by the
+       SyncStatusBadge component (see components/offline/sync-status-badge). */
+    --sync-draft-fg:   220 9% 35%;
+    --sync-draft-bg:   220 14% 92%;
+    --sync-draft-dot:  220 9% 50%;
+
+    --sync-pending-fg: 32 75% 32%;
+    --sync-pending-bg: 40 92% 92%;
+    --sync-pending-dot:34 92% 48%;
+
+    --sync-synced-fg:  152 55% 28%;
+    --sync-synced-bg:  150 55% 92%;
+    --sync-synced-dot: 152 60% 40%;
+
+    --sync-error-fg:   0 65% 38%;
+    --sync-error-bg:   0 75% 94%;
+    --sync-error-dot:  0 72% 52%;
   }
 
   .dark {
@@ -80,6 +99,23 @@
     --sidebar-accent: 221 29% 18%;
     --sidebar-accent-foreground: 0 0% 100%;
     --sidebar-border: 221 23% 24%;
+
+    /* Sync status palette — dark theme variants, desaturated. */
+    --sync-draft-fg:   220 12% 75%;
+    --sync-draft-bg:   220 18% 22%;
+    --sync-draft-dot:  220 10% 60%;
+
+    --sync-pending-fg: 40 92% 75%;
+    --sync-pending-bg: 32 50% 20%;
+    --sync-pending-dot:38 92% 58%;
+
+    --sync-synced-fg:  150 55% 70%;
+    --sync-synced-bg:  152 35% 18%;
+    --sync-synced-dot: 152 60% 50%;
+
+    --sync-error-fg:   0 80% 78%;
+    --sync-error-bg:   0 45% 22%;
+    --sync-error-dot:  0 72% 58%;
   }
 
   * {
@@ -95,6 +131,89 @@
 
   .dark body {
     background-image: radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.08), transparent 32%);
+  }
+}
+
+@layer components {
+  /* ─── Sync status badge ──────────────────────────────────────────────
+     Minimal, dense, ERP-grade. The base class is shape-only; one of the
+     `--state-*` modifier classes paints color from the CSS variables in
+     :root / .dark, so dark mode and theming require no JS.            */
+  .sync-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    line-height: 1;
+    white-space: nowrap;
+    color: hsl(var(--fg));
+    background: hsl(var(--bg));
+    border: 1px solid hsl(var(--fg) / 0.18);
+    user-select: none;
+  }
+  .sync-badge--lg {
+    height: 22px;
+    padding: 0 8px;
+    font-size: 11px;
+    border-radius: 5px;
+  }
+  .sync-badge__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: hsl(var(--dot));
+    flex: 0 0 6px;
+  }
+  .sync-badge--pending .sync-badge__dot {
+    animation: sync-pulse 1.4s ease-in-out infinite;
+  }
+  .sync-badge--draft   { --fg: var(--sync-draft-fg);   --bg: var(--sync-draft-bg);   --dot: var(--sync-draft-dot); }
+  .sync-badge--pending { --fg: var(--sync-pending-fg); --bg: var(--sync-pending-bg); --dot: var(--sync-pending-dot); }
+  .sync-badge--synced  { --fg: var(--sync-synced-fg);  --bg: var(--sync-synced-bg);  --dot: var(--sync-synced-dot); }
+  .sync-badge--error   { --fg: var(--sync-error-fg);   --bg: var(--sync-error-bg);   --dot: var(--sync-error-dot); }
+
+  .sync-retry-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    height: 18px;
+    padding: 0 5px;
+    margin-left: 4px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: hsl(var(--sync-error-fg));
+    background: transparent;
+    border: 1px solid hsl(var(--sync-error-fg) / 0.4);
+    cursor: pointer;
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+  .sync-retry-btn:hover {
+    background: hsl(var(--sync-error-fg) / 0.12);
+  }
+  .sync-retry-btn:focus-visible {
+    outline: 2px solid hsl(var(--sync-error-dot));
+    outline-offset: 1px;
+  }
+  .sync-retry-btn[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  @keyframes sync-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.45; transform: scale(0.8); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sync-badge--pending .sync-badge__dot { animation: none; }
   }
 }
 
@@ -196,7 +315,221 @@
   }
 }
 
+/* ─── Workbench shell ───────────────────────────────────────────────────────
+   ERP-style dense layout. Left = navigation tree, center = working area,
+   bottom = status bar. All chrome is sticky; only the body scrolls.
+   No wasted space, no flashy gradients. Keep the chrome under 80px total.
+*/
+@layer components {
+  /* The whole right column: topbar (auto) | workbench (1fr) */
+  .wb-shell {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    min-width: 0;
+    height: 100vh;
+  }
+
+  /* Workbench = toolbar (auto) | body (1fr scroll) | statusbar (auto) */
+  .workbench {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    min-height: 0;
+    min-width: 0;
+    background: hsl(var(--background));
+  }
+
+  .wb-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 2.25rem;          /* 36px — tight enterprise toolbar */
+    padding: 0 0.5rem;
+    border-bottom: 1px solid hsl(var(--border));
+    background: hsl(var(--background));
+    font-size: 12px;
+    line-height: 1;
+  }
+  .wb-toolbar__title {
+    font-weight: 500;
+    font-size: 12px;
+    color: hsl(var(--foreground));
+    white-space: nowrap;
+  }
+  .wb-toolbar__sep {
+    width: 1px;
+    height: 16px;
+    background: hsl(var(--border));
+    margin: 0 0.25rem;
+  }
+  .wb-toolbar__spacer { flex: 1 1 auto; }
+
+  .wb-body {
+    min-height: 0;
+    min-width: 0;
+    overflow: auto;
+    scrollbar-gutter: stable;
+    overscroll-behavior: contain;
+    padding: 0.5rem;          /* 8px — the only padding in the work area */
+  }
+
+  .wb-statusbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    height: 1.5rem;           /* 24px */
+    padding: 0 0.5rem;
+    border-top: 1px solid hsl(var(--border));
+    background: hsl(var(--muted) / 0.4);
+    font-size: 11px;
+    color: hsl(var(--muted-foreground));
+    white-space: nowrap;
+  }
+  .wb-statusbar__sep {
+    width: 1px;
+    height: 12px;
+    background: hsl(var(--border));
+  }
+  .wb-statusbar__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    display: inline-block;
+  }
+  .wb-statusbar__dot--ok    { background: hsl(142 60% 38%); }
+  .wb-statusbar__dot--warn  { background: hsl(40 90% 50%); }
+  .wb-statusbar__dot--error { background: hsl(0 65% 50%); }
+  .wb-statusbar__dot--off   { background: hsl(var(--muted-foreground) / 0.5); }
+
+  /* Dense data table primitive — drop into a .wb-body and it just works.
+     Sticky header, 28px row height, zebra-striping, hover highlight, no
+     rounded corners (corners waste pixels at this density). */
+  .wb-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 12px;
+    line-height: 1.25;
+  }
+  .wb-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: hsl(var(--muted) / 0.6);
+    text-align: left;
+    font-weight: 500;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: hsl(var(--muted-foreground));
+    padding: 0.25rem 0.5rem;
+    border-bottom: 1px solid hsl(var(--border));
+    height: 26px;
+  }
+  .wb-table tbody td {
+    padding: 0.25rem 0.5rem;
+    height: 28px;
+    border-bottom: 1px solid hsl(var(--border) / 0.5);
+    vertical-align: middle;
+  }
+  .wb-table tbody tr:hover td { background: hsl(var(--accent) / 0.4); }
+  .wb-table tbody tr[aria-selected="true"] td {
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
+  }
+  .wb-table .wb-num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* Dense form row: 28px tall, label left, control right, no card chrome. */
+  .wb-form {
+    display: grid;
+    grid-template-columns: 9rem minmax(0, 1fr);
+    column-gap: 0.5rem;
+    row-gap: 0.25rem;
+    align-items: center;
+    font-size: 12px;
+  }
+  .wb-form label {
+    color: hsl(var(--muted-foreground));
+    font-weight: 500;
+    text-align: right;
+    padding-right: 0.25rem;
+  }
+  .wb-form input,
+  .wb-form select,
+  .wb-form textarea {
+    height: 28px;
+    padding: 0 0.5rem;
+    font-size: 12px;
+    background: hsl(var(--background));
+    border: 1px solid hsl(var(--border));
+    border-radius: 3px;
+    outline: none;
+  }
+  .wb-form textarea { height: auto; padding: 0.25rem 0.5rem; }
+  .wb-form input:focus,
+  .wb-form select:focus,
+  .wb-form textarea:focus {
+    border-color: hsl(var(--ring));
+    box-shadow: 0 0 0 1px hsl(var(--ring));
+  }
+
+  /* Section divider — replaces .Card chrome inside the workbench. */
+  .wb-section {
+    border: 1px solid hsl(var(--border));
+    border-radius: 3px;
+    background: hsl(var(--background));
+  }
+  .wb-section__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 26px;
+    padding: 0 0.5rem;
+    border-bottom: 1px solid hsl(var(--border));
+    background: hsl(var(--muted) / 0.4);
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: hsl(var(--muted-foreground));
+  }
+  .wb-section__body { padding: 0.5rem; }
+
+  /* Sidebar collapsed (icon-only) mode. Toggled via Ctrl/Cmd+B. */
+  [data-sidebar-collapsed="true"] .sidebar-tree-label,
+  [data-sidebar-collapsed="true"] .sidebar-group-label,
+  [data-sidebar-collapsed="true"] .sidebar-footer {
+    display: none !important;
+  }
+  [data-sidebar-collapsed="true"] .sidebar-root {
+    width: 2.75rem !important;
+  }
+  [data-sidebar-collapsed="true"] .sidebar-tree-row {
+    justify-content: center;
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+  [data-sidebar-collapsed="true"] .app-shell-grid {
+    grid-template-columns: 2.75rem minmax(0, 1fr) !important;
+  }
+}
+
+/* Smoother route transitions — keep it subtle, no bouncing. */
 @keyframes app-route-fade-in {
+  from { opacity: 0; transform: translateY(1px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.app-route-fade {
+  animation: app-route-fade-in 140ms ease-out;
+  will-change: opacity, transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-route-fade { animation: none; }
+}
+
+@keyframes app-route-fade-in-old {
   from {
     opacity: 0.7;
     transform: translateY(2px);
@@ -206,3 +539,4 @@
     transform: translateY(0);
   }
 }
+

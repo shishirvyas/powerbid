@@ -1,8 +1,8 @@
 import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { bomItems, bomMaster, products } from "@/lib/db/schema";
-import { ApiError, errorToResponse, jsonOk, parseJson, parseSearch, requireSession } from "@/lib/api";
+import { bomItems, bomMaster, products, salesOrders } from "@/lib/db/schema";
+import { ApiError, errorToResponse, jsonOk, jsonList, parseJson, parseSearch, requireSession } from "@/lib/api";
 import { bomMasterSchema, listQuerySchema } from "@/lib/schemas";
 
 export const runtime = "nodejs";
@@ -24,6 +24,8 @@ export async function GET(req: NextRequest) {
         isActive: bomMaster.isActive,
         laborCost: bomMaster.laborCost,
         overheadCost: bomMaster.overheadCost,
+        soId: bomMaster.soId,
+        soNumber: salesOrders.soNumber,
         createdAt: bomMaster.createdAt,
         productId: products.id,
         productName: products.name,
@@ -31,6 +33,7 @@ export async function GET(req: NextRequest) {
       })
       .from(bomMaster)
       .innerJoin(products, eq(bomMaster.productId, products.id))
+      .leftJoin(salesOrders, eq(bomMaster.soId, salesOrders.id))
       .where(where)
       .orderBy(desc(bomMaster.updatedAt))
       .limit(limit)
@@ -53,7 +56,7 @@ export async function GET(req: NextRequest) {
       .innerJoin(products, eq(bomMaster.productId, products.id))
       .where(where);
 
-    return jsonOk({
+    return jsonList({
       rows: rows.map((r) => ({ ...r, itemCount: counts[r.id] || 0 })),
       total: count,
       limit,
@@ -82,6 +85,7 @@ export async function POST(req: NextRequest) {
         .insert(bomMaster)
         .values({
           productId: data.productId,
+          soId: data.soId ?? null,
           bomCode: data.bomCode,
           version: data.version,
           isActive: data.isActive,
@@ -95,7 +99,8 @@ export async function POST(req: NextRequest) {
       await tx.insert(bomItems).values(
         data.items.map((it) => ({
           bomId: master.id,
-          rawMaterialId: it.rawMaterialId,
+          rawMaterialId: it.rawMaterialId ?? null,
+          supplierProductId: it.supplierProductId ?? null,
           qtyPerUnit: it.qtyPerUnit.toString(),
           unitName: it.unitName,
           wastagePercent: it.wastagePercent.toString(),

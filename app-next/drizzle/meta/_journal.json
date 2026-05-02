@@ -29,6 +29,20 @@
       "when": 1777492000000,
       "tag": "0010_sales_and_dispatch",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1777680000000,
+      "tag": "0011_api_idempotency",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1746143200000,
+      "tag": "0012_procurement_bom_links",
+      "breakpoints": true
     }
   ]
 }

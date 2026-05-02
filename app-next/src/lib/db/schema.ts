@@ -261,6 +261,36 @@ export const auditLog = pgTable("audit_log", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/* ----------------------------- idempotency --------------------- */
+export const apiIdempotency = pgTable(
+  "api_idempotency",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    method: text("method").notNull(),
+    path: text("path").notNull(),
+    actionType: text("action_type"),
+    key: text("key").notNull(),
+    fingerprint: text("fingerprint"),
+    status: text("status").notNull().default("processing"), // processing | completed
+    responseStatus: integer("response_status"),
+    responseBody: text("response_body"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    uqRequest: uniqueIndex("uq_api_idempotency_request").on(
+      t.userId,
+      t.method,
+      t.path,
+      t.key,
+    ),
+    idxCreatedAt: index("idx_api_idempotency_created_at").on(t.createdAt),
+  }),
+);
+
 export const communicationLogs = pgTable(
   "communication_logs",
   {
@@ -425,6 +455,31 @@ export const supplierBankDetails = pgTable(
   (t) => ({ idx: index("idx_supplier_bank_details_supplier").on(t.supplierId) }),
 );
 
+/* ----------------------------- supplier products ----------------- */
+export const supplierProducts = pgTable(
+  "supplier_products",
+  {
+    id: serial("id").primaryKey(),
+    supplierId: integer("supplier_id").references(() => suppliers.id, { onDelete: "set null" }),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    unitId: integer("unit_id").references(() => units.id, { onDelete: "set null" }),
+    unitName: text("unit_name"),
+    standardPrice: numeric("standard_price", { precision: 14, scale: 2 }).notNull().default("0"),
+    leadDays: integer("lead_days").notNull().default(0),
+    hsnCode: text("hsn_code"),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    idxSupplier: index("idx_supplier_products_supplier").on(t.supplierId),
+    idxActive: index("idx_supplier_products_active").on(t.isActive),
+    uqSupplierCode: uniqueIndex("uq_supplier_products_code").on(t.code),
+  })
+);
+
 /* ----------------------------- purchase orders ------------------- */
 export const purchaseOrders = pgTable(
   "purchase_orders",
@@ -446,6 +501,8 @@ export const purchaseOrders = pgTable(
     remarks: text("remarks"),
     termsConditions: text("terms_conditions"),
     paymentTerms: text("payment_terms"),
+    soId: integer("so_id").references(() => salesOrders.id, { onDelete: "set null" }),
+    bomId: integer("bom_id").references(() => bomMaster.id, { onDelete: "set null" }),
     createdBy: integer("created_by").references(() => users.id, { onDelete: "set null" }),
     updatedBy: integer("updated_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -454,6 +511,7 @@ export const purchaseOrders = pgTable(
   (t) => ({
     idxSupplier: index("idx_po_supplier").on(t.supplierId),
     idxStatus: index("idx_po_status").on(t.status),
+    idxSo: index("idx_po_so").on(t.soId),
   })
 );
 
@@ -586,6 +644,7 @@ export const stockAdjustments = pgTable(
 export const bomMaster = pgTable("bom_master", {
   id: serial("id").primaryKey(),
   productId: integer("product_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+  soId: integer("so_id").references(() => salesOrders.id, { onDelete: "set null" }),
   bomCode: text("bom_code").notNull().unique(),
   version: text("version").notNull().default("1.0"),
   isActive: boolean("is_active").notNull().default(true),
@@ -602,7 +661,8 @@ export const bomItems = pgTable(
   {
     id: serial("id").primaryKey(),
     bomId: integer("bom_id").notNull().references(() => bomMaster.id, { onDelete: "cascade" }),
-    rawMaterialId: integer("raw_material_id").notNull().references(() => products.id, { onDelete: "cascade" }),
+    rawMaterialId: integer("raw_material_id").references(() => products.id, { onDelete: "set null" }),
+    supplierProductId: integer("supplier_product_id").references(() => supplierProducts.id, { onDelete: "set null" }),
     qtyPerUnit: numeric("qty_per_unit", { precision: 14, scale: 4 }).notNull(),
     unitName: text("unit_name"),
     wastagePercent: numeric("wastage_percent", { precision: 5, scale: 2 }).notNull().default("0"),

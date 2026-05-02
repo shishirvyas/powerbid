@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, Loader2, Truck } from "lucide-react";
+import { ArrowLeft, FileStack, Loader2, Pencil, Plus, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -10,10 +10,12 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Typeahead } from "@/components/typeahead";
+import { FormField } from "@/components/form-field";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api, ApiClientError } from "@/lib/api-client";
 import { formatCurrency, formatDate } from "@/lib/calc";
-import { useList, useResource } from "@/lib/hooks";
+import { useDebounced, useList, useResource } from "@/lib/hooks";
 
 type Detail = {
   id: number;
@@ -52,10 +54,89 @@ type Detail = {
 };
 
 type Warehouse = { id: number; code: string; name: string };
+type Customer = { id: number; code: string; name: string };
+type Product = { id: number; sku: string | null; name: string; unitCode: string | null; unitName: string | null };
+
+type SoLine = {
+  productId: string;
+  productQuery: string;
+  productName: string;
+  unitName: string;
+  qty: string;
+  unitPrice: string;
+  gstRate: string;
+};
 
 export default function SalesOrderDetailClient({ id }: { id: string }) {
   const { data, loading, error, refresh } = useResource<Detail>(`/api/sales-orders/${id}`);
   const { data: warehouses } = useList<Warehouse>("/api/warehouses", { limit: 100 });
+
+  // Edit dialog state
+  const [editOpen, setEditOpen] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const [editForm, setEditForm] = React.useState<{
+    orderDate: string; customerId: string; notes: string; items: SoLine[];
+  }>({ orderDate: "", customerId: "", notes: "", items: [] });
+  const [customerQuery, setCustomerQuery] = React.useState("");
+  const [productLookupQuery, setProductLookupQuery] = React.useState("");
+  const customerLookupQ = useDebounced(customerQuery, 250);
+  const productLookupQ = useDebounced(productLookupQuery, 250);
+  const { data: customers } = useList<Customer>("/api/customers", { q: customerLookupQ, limit: 100 });
+  const { data: products } = useList<Product>("/api/products", { q: productLookupQ, limit: 100 });
+
+  function openEdit() {
+    if (!data) return;
+    setEditForm({
+      orderDate: data.orderDate.slice(0, 10),
+      customerId: String(data.customerId),
+      notes: data.notes || "",
+      items: data.items.map((line) => ({
+        productId: line.productId ? String(line.productId) : "",
+        productQuery: line.productName,
+        productName: line.productName,
+        unitName: line.unitName || "",
+        qty: String(line.qty),
+        unitPrice: String(line.unitPrice),
+        gstRate: String(line.gstRate),
+      })),
+    });
+    setCustomerQuery(data.customerName || "");
+    setEditOpen(true);
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editForm.customerId) return toast.error("Select customer");
+    if (editForm.items.length === 0 || editForm.items.some((i) => !i.productId || Number(i.qty) <= 0))
+      return toast.error("Add valid line items");
+    try {
+      setSaving(true);
+      await api(`/api/sales-orders/${id}`, {
+        method: "PUT",
+        json: {
+          orderDate: editForm.orderDate,
+          customerId: Number(editForm.customerId),
+          status: data!.status,
+          notes: editForm.notes || null,
+          items: editForm.items.map((i) => ({
+            productId: Number(i.productId),
+            productName: i.productName,
+            unitName: i.unitName || null,
+            qty: Number(i.qty),
+            unitPrice: Number(i.unitPrice),
+            gstRate: Number(i.gstRate),
+          })),
+        },
+      });
+      toast.success("Sales order updated");
+      setEditOpen(false);
+      refresh();
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : "Update failed");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   const [dispatching, setDispatching] = React.useState(false);
   const [warehouseQuery, setWarehouseQuery] = React.useState("");
@@ -120,6 +201,7 @@ export default function SalesOrderDetailClient({ id }: { id: string }) {
   if (loading || !data) return <div className="text-sm text-muted-foreground">Loading...</div>;
 
   return (
+    <>
     <div className="space-y-6 animate-in fade-in-50">
       <PageHeader
         title={data.soNumber}
@@ -128,6 +210,14 @@ export default function SalesOrderDetailClient({ id }: { id: string }) {
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline"><Link href="/sales-orders"><ArrowLeft className="h-4 w-4" /> Back</Link></Button>
             <Badge variant={data.status.includes("dispatch") ? "info" : data.status === "confirmed" ? "warning" : "muted"}>{data.status.replaceAll("_", " ")}</Badge>
+            {(data.status === "draft" || data.status === "confirmed") && (
+              <Button variant="outline" onClick={openEdit}><Pencil className="h-4 w-4" /> Edit</Button>
+            )}
+            <Button asChild variant="outline" title="New BOM for this SO">
+              <Link href={`/boms?newBom=1&soId=${data.id}&soNumber=${encodeURIComponent(data.soNumber)}`}>
+                <FileStack className="h-4 w-4" /> New BOM
+              </Link>
+            </Button>
           </div>
         }
       />
@@ -282,5 +372,98 @@ export default function SalesOrderDetailClient({ id }: { id: string }) {
         </CardContent>
       </Card>
     </div>
+
+    {/* ── Edit Sales Order Dialog ── */}
+    <Dialog open={editOpen} onOpenChange={setEditOpen}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
+        <DialogHeader>
+          <DialogTitle>Edit {data.soNumber}</DialogTitle>
+          <DialogDescription>Update order details and line items. Status must be draft or confirmed.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={saveEdit} className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <FormField label="Order Date" required>
+              <Input type="date" value={editForm.orderDate} onChange={(e) => setEditForm((f) => ({ ...f, orderDate: e.target.value }))} />
+            </FormField>
+            <FormField label="Customer" required>
+              <Typeahead
+                value={editForm.customerId}
+                inputValue={customerQuery}
+                onInputValueChange={(v) => { setCustomerQuery(v); setEditForm((f) => ({ ...f, customerId: "" })); }}
+                onSelect={(opt) => { setEditForm((f) => ({ ...f, customerId: opt.value })); setCustomerQuery(opt.label); }}
+                options={(customers?.rows || []).map((c) => ({ value: String(c.id), label: `${c.code} - ${c.name}` }))}
+                placeholder="Search customer..."
+              />
+            </FormField>
+          </div>
+          <FormField label="Notes">
+            <Input value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} />
+          </FormField>
+
+          <div className="space-y-2 rounded-md border p-3">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold">Line Items</div>
+              <Button type="button" variant="outline" size="sm" onClick={() =>
+                setEditForm((f) => ({ ...f, items: [...f.items, { productId: "", productQuery: "", productName: "", unitName: "", qty: "1", unitPrice: "0", gstRate: "18" }] }))
+              }><Plus className="h-4 w-4" /> Add Line</Button>
+            </div>
+            {editForm.items.map((line, idx) => (
+              <div key={idx} className="grid grid-cols-12 gap-1 rounded border bg-muted/30 p-2 items-end">
+                <div className="col-span-12 md:col-span-4">
+                  <div className="text-xs text-muted-foreground mb-0.5">Product</div>
+                  <Typeahead
+                    value={line.productId}
+                    inputValue={line.productQuery}
+                    onInputValueChange={(v) => {
+                      setProductLookupQuery(v);
+                      setEditForm((f) => {
+                        const items = [...f.items];
+                        items[idx] = { ...items[idx], productId: "", productQuery: v, productName: v };
+                        return { ...f, items };
+                      });
+                    }}
+                    onSelect={(opt) => {
+                      const prod = products?.rows.find((p) => String(p.id) === opt.value);
+                      setEditForm((f) => {
+                        const items = [...f.items];
+                        items[idx] = { ...items[idx], productId: opt.value, productQuery: opt.label, productName: prod?.name || opt.label, unitName: prod?.unitName || "" };
+                        return { ...f, items };
+                      });
+                    }}
+                    options={(products?.rows || []).map((p) => ({ value: String(p.id), label: `${p.sku || "NO-SKU"} - ${p.name}` }))}
+                    placeholder="Search product..."
+                  />
+                </div>
+                <div className="col-span-4 md:col-span-2">
+                  <div className="text-xs text-muted-foreground mb-0.5">Qty</div>
+                  <Input type="number" min="0" step="0.01" value={line.qty} onChange={(e) => setEditForm((f) => { const items = [...f.items]; items[idx] = { ...items[idx], qty: e.target.value }; return { ...f, items }; })} />
+                </div>
+                <div className="col-span-4 md:col-span-2">
+                  <div className="text-xs text-muted-foreground mb-0.5">Unit Price</div>
+                  <Input type="number" min="0" step="0.01" value={line.unitPrice} onChange={(e) => setEditForm((f) => { const items = [...f.items]; items[idx] = { ...items[idx], unitPrice: e.target.value }; return { ...f, items }; })} />
+                </div>
+                <div className="col-span-3 md:col-span-2">
+                  <div className="text-xs text-muted-foreground mb-0.5">GST %</div>
+                  <Input type="number" min="0" max="28" step="0.01" value={line.gstRate} onChange={(e) => setEditForm((f) => { const items = [...f.items]; items[idx] = { ...items[idx], gstRate: e.target.value }; return { ...f, items }; })} />
+                </div>
+                <div className="col-span-1">
+                  <Button type="button" variant="ghost" size="icon" onClick={() => setEditForm((f) => ({ ...f, items: f.items.filter((_, i) => i !== idx) }))}>
+                    ✕
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button type="submit" disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save Changes
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

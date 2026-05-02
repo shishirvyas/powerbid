@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { customers, dispatchOrders, salesOrderItems, salesOrders, warehouses } from "@/lib/db/schema";
 import { ApiError, errorToResponse, jsonOk, parseId, parseJson, requireSession } from "@/lib/api";
 import { salesOrderSchema } from "@/lib/schemas";
+import { runIdempotentMutation } from "@/lib/idempotency";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -73,71 +74,79 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
     if (session.role === "viewer") throw new ApiError(403, "Only sales/admin users can update sales orders");
     const id = parseId((await ctx.params).id);
     const data = await parseJson(req, salesOrderSchema);
+    return await runIdempotentMutation(
+      {
+        req,
+        userId: session.userId,
+        fingerprint: { id, data },
+      },
+      async () => {
+        const [existing] = await db
+          .select({ status: salesOrders.status })
+          .from(salesOrders)
+          .where(eq(salesOrders.id, id));
+        if (!existing) throw new ApiError(404, "Sales order not found");
+        if (existing.status !== "draft" && existing.status !== "confirmed") {
+          throw new ApiError(409, "Only draft/confirmed orders can be edited");
+        }
 
-    const [existing] = await db
-      .select({ status: salesOrders.status })
-      .from(salesOrders)
-      .where(eq(salesOrders.id, id));
-    if (!existing) throw new ApiError(404, "Sales order not found");
-    if (existing.status !== "draft" && existing.status !== "confirmed") {
-      throw new ApiError(409, "Only draft/confirmed orders can be edited");
-    }
+        const calc = calcQuotation({
+          items: data.items.map((i) => ({
+            productId: i.productId ?? 0,
+            productName: i.productName,
+            unitName: i.unitName || null,
+            qty: i.qty,
+            unitPrice: i.unitPrice,
+            gstRate: i.gstRate,
+            gstSlabId: null,
+          })),
+          discountType: "percent",
+          discountValue: 0,
+          freightAmount: 0,
+        });
 
-    const calc = calcQuotation({
-      items: data.items.map((i) => ({
-        productId: i.productId ?? 0,
-        productName: i.productName,
-        unitName: i.unitName || null,
-        qty: i.qty,
-        unitPrice: i.unitPrice,
-        gstRate: i.gstRate,
-        gstSlabId: null,
-      })),
-      discountType: "percent",
-      discountValue: 0,
-      freightAmount: 0,
-    });
+        await db.transaction(async (tx) => {
+          await tx
+            .update(salesOrders)
+            .set({
+              orderDate: data.orderDate,
+              quotationId: data.quotationId || null,
+              customerId: data.customerId,
+              status: data.status,
+              subtotal: String(calc.subtotal),
+              discountAmount: String(calc.discountAmount),
+              taxableAmount: String(calc.taxableAmount),
+              gstAmount: String(calc.gstAmount),
+              freightAmount: String(calc.freightAmount),
+              grandTotal: String(calc.grandTotal),
+              notes: data.notes,
+              updatedBy: session.userId,
+              updatedAt: new Date(),
+            })
+            .where(eq(salesOrders.id, id));
 
-    await db.transaction(async (tx) => {
-      await tx
-        .update(salesOrders)
-        .set({
-          orderDate: data.orderDate,
-          quotationId: data.quotationId || null,
-          customerId: data.customerId,
-          status: data.status,
-          subtotal: String(calc.subtotal),
-          discountAmount: String(calc.discountAmount),
-          taxableAmount: String(calc.taxableAmount),
-          gstAmount: String(calc.gstAmount),
-          freightAmount: String(calc.freightAmount),
-          grandTotal: String(calc.grandTotal),
-          notes: data.notes,
-          updatedBy: session.userId,
-          updatedAt: new Date(),
-        })
-        .where(eq(salesOrders.id, id));
+          await tx.delete(salesOrderItems).where(eq(salesOrderItems.soId, id));
+          await tx.insert(salesOrderItems).values(
+            calc.lines.map((line, idx) => ({
+              soId: id,
+              productId: line.productId || null,
+              productName: line.productName,
+              unitName: line.unitName || null,
+              qty: String(line.qty),
+              dispatchedQty: "0",
+              unitPrice: String(line.unitPrice),
+              gstRate: String(line.gstRate),
+              lineSubtotal: String(line.lineSubtotal),
+              lineGst: String(line.lineGst),
+              lineTotal: String(line.lineTotal),
+              sortOrder: idx,
+            })),
+          );
+        });
 
-      await tx.delete(salesOrderItems).where(eq(salesOrderItems.soId, id));
-      await tx.insert(salesOrderItems).values(
-        calc.lines.map((line, idx) => ({
-          soId: id,
-          productId: line.productId || null,
-          productName: line.productName,
-          unitName: line.unitName || null,
-          qty: String(line.qty),
-          dispatchedQty: "0",
-          unitPrice: String(line.unitPrice),
-          gstRate: String(line.gstRate),
-          lineSubtotal: String(line.lineSubtotal),
-          lineGst: String(line.lineGst),
-          lineTotal: String(line.lineTotal),
-          sortOrder: idx,
-        })),
-      );
-    });
-
-    return jsonOk({ ok: true });
+        return { data: { ok: true } };
+      },
+    );
   } catch (err) {
     return errorToResponse(err);
   }
@@ -148,18 +157,26 @@ export async function DELETE(_req: NextRequest, ctx: Ctx) {
     const session = await requireSession();
     if (session.role === "viewer") throw new ApiError(403, "Only sales/admin users can delete sales orders");
     const id = parseId((await ctx.params).id);
+    return await runIdempotentMutation(
+      {
+        req: _req,
+        userId: session.userId,
+        fingerprint: { id },
+      },
+      async () => {
+        const [existing] = await db
+          .select({ status: salesOrders.status })
+          .from(salesOrders)
+          .where(eq(salesOrders.id, id));
+        if (!existing) throw new ApiError(404, "Sales order not found");
+        if (existing.status === "dispatched" || existing.status === "partially_dispatched") {
+          throw new ApiError(409, "Cannot delete dispatched sales order");
+        }
 
-    const [existing] = await db
-      .select({ status: salesOrders.status })
-      .from(salesOrders)
-      .where(eq(salesOrders.id, id));
-    if (!existing) throw new ApiError(404, "Sales order not found");
-    if (existing.status === "dispatched" || existing.status === "partially_dispatched") {
-      throw new ApiError(409, "Cannot delete dispatched sales order");
-    }
-
-    await db.delete(salesOrders).where(eq(salesOrders.id, id));
-    return jsonOk({ ok: true });
+        await db.delete(salesOrders).where(eq(salesOrders.id, id));
+        return { data: { ok: true } };
+      },
+    );
   } catch (err) {
     return errorToResponse(err);
   }

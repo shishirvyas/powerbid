@@ -5,12 +5,13 @@ import { inquiries, inquiryItems, customers } from "@/lib/db/schema";
 import {
   ApiError,
   errorToResponse,
-  jsonOk,
+  jsonOk, jsonList,
   parseJson,
   parseSearch,
   requireSession,
 } from "@/lib/api";
 import { inquiryListQuerySchema, inquirySchema } from "@/lib/schemas";
+import { runIdempotentMutation } from "@/lib/idempotency";
 
 export const runtime = "nodejs";
 
@@ -107,7 +108,7 @@ export async function GET(req: NextRequest) {
       .from(inquiries)
       .leftJoin(customers, eq(inquiries.customerId, customers.id))
       .where(where);
-    return jsonOk({ rows, total: count, limit, offset });
+    return jsonList({ rows, total: count, limit, offset });
   } catch (err) {
     return errorToResponse(err);
   }
@@ -115,27 +116,36 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireSession();
+    const session = await requireSession();
     const data = await parseJson(req, inquirySchema);
-    const inquiryNo = await nextInquiryNo();
-    const { items, ...rest } = data;
-    const [row] = await db
-      .insert(inquiries)
-      .values({ ...rest, inquiryNo })
-      .returning();
-    if (items.length) {
-      await db.insert(inquiryItems).values(
-        items.map((it) => ({
-          inquiryId: row.id,
-          productId: it.productId ?? null,
-          productName: it.productName,
-          unitName: it.unitName ?? null,
-          qty: String(it.qty),
-          remarks: it.remarks ?? null,
-        })),
-      );
-    }
-    return jsonOk(row, { status: 201 });
+    return await runIdempotentMutation(
+      {
+        req,
+        userId: session.userId,
+        fingerprint: data,
+      },
+      async () => {
+        const inquiryNo = await nextInquiryNo();
+        const { items, ...rest } = data;
+        const [row] = await db
+          .insert(inquiries)
+          .values({ ...rest, inquiryNo })
+          .returning();
+        if (items.length) {
+          await db.insert(inquiryItems).values(
+            items.map((it) => ({
+              inquiryId: row.id,
+              productId: it.productId ?? null,
+              productName: it.productName,
+              unitName: it.unitName ?? null,
+              qty: String(it.qty),
+              remarks: it.remarks ?? null,
+            })),
+          );
+        }
+        return { data: row, status: 201 };
+      },
+    );
   } catch (err) {
     return errorToResponse(err);
   }

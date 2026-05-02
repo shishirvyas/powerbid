@@ -24,6 +24,8 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       .select({
         id: purchaseOrders.id,
         poNumber: purchaseOrders.poNumber,
+        soId: purchaseOrders.soId,
+        bomId: purchaseOrders.bomId,
         expectedDate: purchaseOrders.expectedDate,
         status: purchaseOrders.status,
         currency: purchaseOrders.currency,
@@ -79,6 +81,8 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
         .update(purchaseOrders)
         .set({
           supplierId: data.supplierId,
+          soId: data.soId ?? null,
+          bomId: data.bomId ?? null,
           expectedDate: data.expectedDate,
           status: data.status,
           currency: data.currency,

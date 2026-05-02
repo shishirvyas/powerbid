@@ -5,7 +5,7 @@ import { customers } from "@/lib/db/schema";
 import {
   ApiError,
   errorToResponse,
-  jsonOk,
+  jsonOk, jsonList,
   parseJson,
   parseSearch,
   requireSession,
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
       .select({ count: sql<number>`count(*)::int` })
       .from(customers)
       .where(where);
-    return jsonOk({ rows, total: count, limit, offset });
+    return jsonList({ rows, total: count, limit, offset });
   } catch (err) {
     return errorToResponse(err);
   }

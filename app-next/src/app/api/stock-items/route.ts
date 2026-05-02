@@ -5,7 +5,7 @@ import { stockItems, products, warehouses, stockMovements } from "@/lib/db/schem
 import {
   ApiError,
   errorToResponse,
-  jsonOk,
+  jsonOk, jsonList,
   parseJson,
   parseSearch,
   requireSession,
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
       .innerJoin(warehouses, eq(stockItems.warehouseId, warehouses.id))
       .where(where);
 
-    return jsonOk({ rows, total: count, limit, offset });
+    return jsonList({ rows, total: count, limit, offset });
   } catch (err) {
     return errorToResponse(err);
   }

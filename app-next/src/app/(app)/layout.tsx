@@ -5,6 +5,11 @@ import { Sidebar } from "@/components/sidebar";
 import { Topbar } from "@/components/topbar";
 import { CommandPalette } from "@/components/command-palette";
 import { RouteContentSkeleton } from "@/components/route-content-skeleton";
+import { AppShortcuts } from "@/components/app-shortcuts";
+import { Workbench } from "@/components/workbench";
+import { SidebarCollapseController } from "@/components/sidebar-collapse-controller";
+import { OfflineToast } from "@/components/offline-toast";
+import { SyncProvider } from "@/lib/offline";
 
 export default async function AppLayout({
   children,
@@ -15,23 +20,26 @@ export default async function AppLayout({
   if (!session) redirect("/login");
 
   return (
-    <div className="min-h-screen bg-background md:grid md:grid-cols-[14rem_minmax(0,1fr)]">
-      <Sidebar />
-      <div className="flex min-h-screen min-w-0 flex-col md:h-screen md:overflow-hidden">
-        <Topbar
-          user={{
-            name: session.name,
-            email: session.email,
-            role: session.role,
-          }}
-        />
-        <main className="dense-ui flex-1 min-w-0 p-2 sm:p-3 lg:p-3 md:overflow-auto md:[scrollbar-gutter:stable] app-scroll-area overscroll-contain">
-          <Suspense fallback={<RouteContentSkeleton />}>
-            {children}
-          </Suspense>
-        </main>
+    <SyncProvider>
+      <div className="app-shell-grid h-screen bg-background md:grid md:grid-cols-[14rem_minmax(0,1fr)] overflow-hidden">
+        <Sidebar />
+        <div className="wb-shell">
+          <Topbar
+            user={{
+              name: session.name,
+              email: session.email,
+              role: session.role,
+            }}
+          />
+          <Workbench>
+            <Suspense fallback={<RouteContentSkeleton />}>{children}</Suspense>
+          </Workbench>
+        </div>
+        <CommandPalette />
+        <AppShortcuts />
+        <SidebarCollapseController />
+        <OfflineToast />
       </div>
-      <CommandPalette />
-    </div>
+    </SyncProvider>
   );
 }

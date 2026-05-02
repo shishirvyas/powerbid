@@ -61,6 +61,7 @@ const navConfig: NavNode[] = [
     label: "Procurement",
     children: [
       { label: "Suppliers", href: "/suppliers", icon: Users },
+      { label: "BOMs", href: "/boms", icon: FileText },
       { label: "Purchase Orders", href: "/purchase-orders", icon: FileText },
     ],
   },
@@ -81,7 +82,6 @@ const navConfig: NavNode[] = [
     children: [
       { label: "Warehouses", href: "/warehouses", icon: Package },
       { label: "Stock Items", href: "/stock-items", icon: Package },
-      { label: "BOM", href: "/boms", icon: FileText },
       { label: "Production Orders", href: "/production-orders", icon: Settings },
     ],
   },
@@ -100,7 +100,8 @@ const navConfig: NavNode[] = [
     label: "Masters",
     children: [
       { label: "Customers", href: "/customers", icon: Users },
-      { label: "Products", href: "/products", icon: Package },
+      { label: "LAN Products", href: "/products", icon: Package },
+      { label: "Supplier Products", href: "/supplier-products", icon: Package },
       { label: "Units", href: "/units", icon: Package },
       { label: "Subject Templates", href: "/subject-templates", icon: FileText },
     ],
@@ -109,7 +110,7 @@ const navConfig: NavNode[] = [
 
 function Brand() {
   return (
-    <div className="flex h-14 items-center gap-2 px-4 border-b border-sidebar-border">
+    <div className="flex h-9 items-center gap-2 px-2.5 border-b border-sidebar-border">
       <BrandLogo compact className="" />
     </div>
   );
@@ -123,7 +124,7 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   }
 
   return (
-    <nav className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5 app-scroll-area">
+    <nav className="flex-1 overflow-y-auto px-1.5 py-1.5 space-y-0 app-scroll-area">
       {navConfig.map((node) => {
         if (node.type === "item") {
           const active = isActive(node.href);
@@ -134,15 +135,16 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
               href={node.href}
               prefetch
               onClick={onNavigate}
+              title={node.label}
               className={cn(
-                "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] leading-5 transition-colors",
+                "sidebar-tree-row flex items-center gap-2 rounded px-2 py-1 text-[12px] leading-4 transition-colors",
                 active
                   ? "bg-sidebar-accent text-sidebar-accent-foreground"
                   : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
               )}
             >
-              {Icon ? <Icon className="h-4 w-4 shrink-0" /> : null}
-              <span className="truncate">{node.label}</span>
+              {Icon ? <Icon className="h-3.5 w-3.5 shrink-0" /> : null}
+              <span className="sidebar-tree-label truncate">{node.label}</span>
             </Link>
           );
         }
@@ -153,14 +155,14 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
           <div key={node.key} className="pt-1 first:pt-0">
             <div
               className={cn(
-                "px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em]",
+                "sidebar-group-label px-2 pt-1 pb-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
                 hasActiveChild ? "text-sidebar-foreground" : "text-sidebar-foreground/55",
               )}
             >
               {node.label}
             </div>
 
-            <div className="mt-0.5 ml-2.5 space-y-0.5 border-l border-sidebar-border/70 pl-2.5">
+            <div className="space-y-0">
               {node.children.map((child) => {
                 const active = isActive(child.href);
                 const Icon = child.icon;
@@ -170,15 +172,16 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
                     href={child.href}
                     prefetch
                     onClick={onNavigate}
+                    title={child.label}
                     className={cn(
-                      "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] leading-5 transition-colors",
+                      "sidebar-tree-row flex items-center gap-2 rounded px-2 py-1 text-[12px] leading-4 transition-colors",
                       active
                         ? "bg-sidebar-accent text-sidebar-accent-foreground"
                         : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
                     )}
                   >
-                    {Icon ? <Icon className="h-4 w-4 shrink-0" /> : null}
-                    <span className="truncate">{child.label}</span>
+                    {Icon ? <Icon className="h-3.5 w-3.5 shrink-0" /> : null}
+                    <span className="sidebar-tree-label truncate">{child.label}</span>
                   </Link>
                 );
               })}
@@ -192,10 +195,10 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 
 export function Sidebar() {
   return (
-    <aside className="hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:sticky md:top-0 md:flex md:h-screen md:flex-col">
+    <aside className="sidebar-root hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:sticky md:top-0 md:flex md:h-screen md:flex-col md:w-[14rem]">
       <Brand />
       <NavLinks />
-      <div className="border-t border-sidebar-border px-4 py-2 text-[11px] text-sidebar-foreground/50">
+      <div className="sidebar-footer border-t border-sidebar-border px-3 py-1 text-[10px] text-sidebar-foreground/50">
         v0.1 · {new Date().getFullYear()}
       </div>
     </aside>

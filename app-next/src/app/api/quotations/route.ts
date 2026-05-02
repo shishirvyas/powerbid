@@ -5,7 +5,7 @@ import { quotations, quotationItems, customers } from "@/lib/db/schema";
 import {
   ApiError,
   errorToResponse,
-  jsonOk,
+  jsonOk, jsonList,
   parseJson,
   parseSearch,
   requireSession,
@@ -13,6 +13,7 @@ import {
 import { generateQuotationReference } from "@/lib/quotation-reference";
 import { quotationListQuerySchema, quotationSchema } from "@/lib/schemas";
 import { calcQuotation } from "@/lib/calc";
+import { runIdempotentMutation } from "@/lib/idempotency";
 
 export const runtime = "nodejs";
 
@@ -94,7 +95,7 @@ export async function GET(req: NextRequest) {
       .leftJoin(customers, eq(quotations.customerId, customers.id))
       .where(where);
     void session;
-    return jsonOk({ rows, total: count, limit, offset });
+    return jsonList({ rows, total: count, limit, offset });
   } catch (err) {
     return errorToResponse(err);
   }
@@ -104,76 +105,85 @@ export async function POST(req: NextRequest) {
   try {
     const session = await requireSession();
     const data = await parseJson(req, quotationSchema);
-    const calc = calcQuotation({
-      items: data.items,
-      discountType: "percent",
-      discountValue: 0,
-      freightAmount: 0,
-    });
-    const quotationNo = await nextQuotationNo();
-    const referenceNo = await generateQuotationReference({
-      customerId: data.customerId,
-      quotationDate: data.quotationDate,
-      currentReferenceNo: data.referenceNo ?? null,
-    });
-    const [row] = await db
-      .insert(quotations)
-      .values({
-        quotationNo,
-        referenceNo,
-        quotationDate: data.quotationDate,
-        subject: data.subject ?? null,
-        projectName: data.projectName ?? null,
-        customerAttention: data.customerAttention ?? null,
-        introText: data.introText ?? null,
-        validityDays: data.validityDays,
-        customerId: data.customerId,
-        contactPersonId: data.contactPersonId ?? null,
-        inquiryId: data.inquiryId ?? null,
-        subjectTemplateId: data.subjectTemplateId ?? null,
-        status: "draft",
-        currency: "INR",
-        discountType: "percent",
-        discountValue: "0",
-        discountAmount: String(calc.discountAmount),
-        subtotal: String(calc.subtotal),
-        taxableAmount: String(calc.taxableAmount),
-        gstAmount: String(calc.gstAmount),
-        freightAmount: "0",
-        grandTotal: String(calc.grandTotal),
-        termsConditions: data.termsConditions ?? null,
-        paymentTerms: data.paymentTerms ?? null,
-        deliverySchedule: data.deliverySchedule ?? null,
-        notes: data.notes ?? null,
-        signatureMode: data.signatureMode ?? null,
-        signatureData: data.signatureData ?? null,
-        signatureName: data.signatureName ?? null,
-        signatureDesignation: data.signatureDesignation ?? null,
-        signatureMobile: data.signatureMobile ?? null,
-        signatureEmail: data.signatureEmail ?? null,
-        createdBy: session.userId,
-        updatedBy: session.userId,
-      })
-      .returning();
-    await db.insert(quotationItems).values(
-      calc.lines.map((l, i) => ({
-        quotationId: row.id,
-        productId: l.productId ?? null,
-        productName: l.productName,
-        unitName: l.unitName ?? null,
-        qtyBreakup: null,
-        qty: String(l.qty),
-        unitPrice: String(l.unitPrice),
-        discountPercent: "0",
-        gstRate: String(l.gstRate),
-        gstSlabId: data.items[i]?.gstSlabId ?? null,
-        lineSubtotal: String(l.lineSubtotal),
-        lineGst: String(l.lineGst),
-        lineTotal: String(l.lineTotal),
-        sortOrder: i,
-      })),
+    return await runIdempotentMutation(
+      {
+        req,
+        userId: session.userId,
+        fingerprint: data,
+      },
+      async () => {
+        const calc = calcQuotation({
+          items: data.items,
+          discountType: "percent",
+          discountValue: 0,
+          freightAmount: 0,
+        });
+        const quotationNo = await nextQuotationNo();
+        const referenceNo = await generateQuotationReference({
+          customerId: data.customerId,
+          quotationDate: data.quotationDate,
+          currentReferenceNo: data.referenceNo ?? null,
+        });
+        const [row] = await db
+          .insert(quotations)
+          .values({
+            quotationNo,
+            referenceNo,
+            quotationDate: data.quotationDate,
+            subject: data.subject ?? null,
+            projectName: data.projectName ?? null,
+            customerAttention: data.customerAttention ?? null,
+            introText: data.introText ?? null,
+            validityDays: data.validityDays,
+            customerId: data.customerId,
+            contactPersonId: data.contactPersonId ?? null,
+            inquiryId: data.inquiryId ?? null,
+            subjectTemplateId: data.subjectTemplateId ?? null,
+            status: "draft",
+            currency: "INR",
+            discountType: "percent",
+            discountValue: "0",
+            discountAmount: String(calc.discountAmount),
+            subtotal: String(calc.subtotal),
+            taxableAmount: String(calc.taxableAmount),
+            gstAmount: String(calc.gstAmount),
+            freightAmount: "0",
+            grandTotal: String(calc.grandTotal),
+            termsConditions: data.termsConditions ?? null,
+            paymentTerms: data.paymentTerms ?? null,
+            deliverySchedule: data.deliverySchedule ?? null,
+            notes: data.notes ?? null,
+            signatureMode: data.signatureMode ?? null,
+            signatureData: data.signatureData ?? null,
+            signatureName: data.signatureName ?? null,
+            signatureDesignation: data.signatureDesignation ?? null,
+            signatureMobile: data.signatureMobile ?? null,
+            signatureEmail: data.signatureEmail ?? null,
+            createdBy: session.userId,
+            updatedBy: session.userId,
+          })
+          .returning();
+        await db.insert(quotationItems).values(
+          calc.lines.map((l, i) => ({
+            quotationId: row.id,
+            productId: l.productId ?? null,
+            productName: l.productName,
+            unitName: l.unitName ?? null,
+            qtyBreakup: null,
+            qty: String(l.qty),
+            unitPrice: String(l.unitPrice),
+            discountPercent: "0",
+            gstRate: String(l.gstRate),
+            gstSlabId: data.items[i]?.gstSlabId ?? null,
+            lineSubtotal: String(l.lineSubtotal),
+            lineGst: String(l.lineGst),
+            lineTotal: String(l.lineTotal),
+            sortOrder: i,
+          })),
+        );
+        return { data: row, status: 201 };
+      },
     );
-    return jsonOk(row, { status: 201 });
   } catch (err) {
     return errorToResponse(err);
   }
