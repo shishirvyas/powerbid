@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Layers, Loader2, PackageCheck } from "lucide-react";
+import { ArrowRight, ExternalLink, Layers, Loader2, PackageCheck } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,7 @@ type WorkflowBomRow = {
   itemCount: number;
   supplierReadyCount: number;
   openPoCount: number;
+  openPos: Array<{ id: number; poNumber: string }>;
 };
 
 export function WorkflowControlClient() {
@@ -174,6 +175,24 @@ export function WorkflowControlClient() {
                     </div>
                   </div>
 
+                  {hasOpenPo ? (
+                    <div className="rounded-md border border-border bg-muted/40 px-2 py-2 space-y-1">
+                      <div className="text-xs text-muted-foreground font-medium">Linked Purchase Orders</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {row.openPos.map((po) => (
+                          <Link
+                            key={po.id}
+                            href={`/purchase-orders/${po.id}`}
+                            className="inline-flex items-center gap-1 rounded-sm bg-background border border-border px-2 py-0.5 text-xs font-mono hover:bg-accent transition-colors"
+                          >
+                            {po.poNumber}
+                            <ExternalLink className="h-3 w-3 opacity-60" />
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
                   <div className="flex gap-2">
                     <Button
                       className="flex-1"
@@ -181,7 +200,7 @@ export function WorkflowControlClient() {
                       disabled={generating || hasOpenPo || !row.isActive || row.supplierReadyCount === 0}
                     >
                       {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackageCheck className="h-4 w-4" />}
-                      {hasOpenPo ? "PO Already Open" : row.supplierReadyCount === 0 ? "Map Supplier Product" : "Generate PO"}
+                      {hasOpenPo ? "PO Generated" : row.supplierReadyCount === 0 ? "Map Supplier Product" : "Generate PO"}
                     </Button>
                     <Button variant="outline" asChild>
                       <Link href={`/boms?highlight=${row.id}`}>

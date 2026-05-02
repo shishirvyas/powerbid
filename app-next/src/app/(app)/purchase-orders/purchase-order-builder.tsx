@@ -239,7 +239,7 @@ export function PurchaseOrderBuilder({ initial, mode }: { initial: POBuilderInit
       const isUsed = !!(it.productName.trim() || it.productId);
       if (isUsed && !it.productId) row.productName = "Select product";
       const qty = Number(it.qty);
-      if (isUsed && (Number.isNaN(qty) || qty <= 0 || !Number.isInteger(qty))) row.qty = "Whole number > 0";
+      if (isUsed && (Number.isNaN(qty) || qty <= 0)) row.qty = "Must be greater than 0";
       const price = Number(it.unitPrice);
       if (isUsed && (Number.isNaN(price) || price < 0)) row.unitPrice = "≥ 0";
       const gst = Number(it.gstRate);
@@ -410,7 +410,12 @@ export function PurchaseOrderBuilder({ initial, mode }: { initial: POBuilderInit
 
       <Card>
         <CardHeader className="flex flex-row justify-between">
-          <CardTitle className="text-base">Line items</CardTitle>
+          <div className="flex-1">
+            <CardTitle className="text-base">Line items</CardTitle>
+            {errors.items ? (
+              <p className="mt-1 text-xs font-medium text-destructive">{errors.items}</p>
+            ) : null}
+          </div>
           <Button size="sm" variant="outline" onClick={() => setForm(f => ({...f, items: [...f.items, blankInitial.items[0]!]}))}>
             <Plus className="h-4 w-4" /> Add row
           </Button>
@@ -421,7 +426,7 @@ export function PurchaseOrderBuilder({ initial, mode }: { initial: POBuilderInit
             return (
               <div key={idx} className="grid gap-2 rounded-md border bg-muted/30 p-3 lg:grid-cols-12">
                 <div className="lg:col-span-3">
-                  <Label className="text-[10px] uppercase text-muted-foreground">Product</Label>
+                  <Label className="text-[10px] uppercase text-muted-foreground">Product <span className="text-destructive">*</span></Label>
                   <Typeahead
                     value={it.productId}
                     inputValue={it.productQuery}
@@ -436,14 +441,23 @@ export function PurchaseOrderBuilder({ initial, mode }: { initial: POBuilderInit
                     }))}
                     placeholder="Search product..."
                   />
+                  {itemErrors[idx]?.productName ? (
+                    <p className="mt-0.5 text-xs font-medium text-destructive">{itemErrors[idx].productName}</p>
+                  ) : null}
                 </div>
                 <div className="lg:col-span-1">
-                  <Label className="text-[10px] uppercase text-muted-foreground">Qty</Label>
-                  <Input type="number" min="1" value={it.qty} onChange={e => updateItem(idx, "qty", e.target.value)} />
+                  <Label className="text-[10px] uppercase text-muted-foreground">Qty <span className="text-destructive">*</span></Label>
+                  <Input type="number" min="1" step="1" value={it.qty} onChange={e => updateItem(idx, "qty", e.target.value)} />
+                  {itemErrors[idx]?.qty ? (
+                    <p className="mt-0.5 text-xs font-medium text-destructive">{itemErrors[idx].qty}</p>
+                  ) : null}
                 </div>
                 <div className="lg:col-span-2">
-                  <Label className="text-[10px] uppercase text-muted-foreground">Unit price</Label>
+                  <Label className="text-[10px] uppercase text-muted-foreground">Unit price <span className="text-destructive">*</span></Label>
                   <Input type="number" min="0" value={it.unitPrice} onChange={e => updateItem(idx, "unitPrice", e.target.value)} />
+                  {itemErrors[idx]?.unitPrice ? (
+                    <p className="mt-0.5 text-xs font-medium text-destructive">{itemErrors[idx].unitPrice}</p>
+                  ) : null}
                 </div>
                 <div className="lg:col-span-1">
                   <Label className="text-[10px] uppercase text-muted-foreground">Disc %</Label>

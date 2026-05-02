@@ -111,7 +111,7 @@ export const purchaseOrderItemSchema = z.object({
   productId: z.coerce.number().int().positive().nullable().optional(),
   productName: requiredString("Product"),
   unitName: optionalString,
-  qty: z.coerce.number().nonnegative().default(1),
+  qty: z.coerce.number().positive().default(1),
   unitPrice: z.coerce.number().nonnegative().default(0),
   discountPercent: z.coerce.number().min(0).max(100).default(0),
   gstRate: z.coerce.number().min(0).max(100).default(18),

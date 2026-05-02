@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
     let itemCounts: Record<number, number> = {};
     let supplierReadyCounts: Record<number, number> = {};
     let openPoCounts: Record<number, number> = {};
+    let openPosByBom: Record<number, Array<{ id: number; poNumber: string }>> = {};
 
     if (ids.length > 0) {
       const counts = await db
@@ -61,8 +62,8 @@ export async function GET(req: NextRequest) {
         .groupBy(bomItems.bomId);
       supplierReadyCounts = Object.fromEntries(supplierReady.map((r) => [r.bomId, r.count]));
 
-      const openCounts = await db
-        .select({ bomId: purchaseOrders.bomId, count: sql<number>`count(*)::int` })
+      const openPoRows = await db
+        .select({ bomId: purchaseOrders.bomId, id: purchaseOrders.id, poNumber: purchaseOrders.poNumber })
         .from(purchaseOrders)
         .where(
           and(
@@ -70,9 +71,14 @@ export async function GET(req: NextRequest) {
             sql`${purchaseOrders.bomId} is not null`,
             sql`${purchaseOrders.status} not in ('closed', 'cancelled')`,
           ),
-        )
-        .groupBy(purchaseOrders.bomId);
-      openPoCounts = Object.fromEntries(openCounts.map((r) => [Number(r.bomId), r.count]));
+        );
+      const openPosByBom: Record<number, Array<{ id: number; poNumber: string }>> = {};
+      for (const r of openPoRows) {
+        const key = Number(r.bomId);
+        if (!openPosByBom[key]) openPosByBom[key] = [];
+        openPosByBom[key].push({ id: r.id, poNumber: r.poNumber });
+      }
+      openPoCounts = Object.fromEntries(Object.entries(openPosByBom).map(([k, v]) => [k, v.length]));
     }
 
     const [{ count }] = await db
@@ -88,6 +94,7 @@ export async function GET(req: NextRequest) {
         itemCount: itemCounts[r.id] || 0,
         supplierReadyCount: supplierReadyCounts[r.id] || 0,
         openPoCount: openPoCounts[r.id] || 0,
+        openPos: openPosByBom[r.id] || [],
       })),
       total: count,
       limit,
