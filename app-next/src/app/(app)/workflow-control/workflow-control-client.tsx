@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useDebounced, useList } from "@/lib/hooks";
 import { api, ApiClientError } from "@/lib/api-client";
@@ -88,12 +87,12 @@ export function WorkflowControlClient() {
   }
 
   return (
-    <div className="space-y-6 animate-in fade-in-50">
+    <div className="space-y-3 animate-in fade-in-50">
       <PageHeader
         title="Workflow Control"
-        description="BOM to Procurement handoff. Generate draft purchase orders directly from BOM cards."
+        description="BOM → Procurement handoff. Generate draft purchase orders directly from BOM rows."
         actions={
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" size="sm">
             <Link href="/purchase-orders">
               Open Purchase Orders <ArrowRight className="h-4 w-4" />
             </Link>
@@ -101,117 +100,174 @@ export function WorkflowControlClient() {
         }
       />
 
-      <div className="max-w-md">
+      <div className="flex items-center justify-between gap-3">
         <Input
           placeholder="Search BOM code / product / SO..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          className="h-8 max-w-sm text-sm"
         />
+        {data ? (
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {data.rows.length} of {data.total} BOM{data.total === 1 ? "" : "s"}
+          </span>
+        ) : null}
       </div>
 
       {error ? (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
           {error}
         </div>
       ) : null}
 
       {loading && !data ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-44 animate-pulse rounded-xl border bg-muted/40" />
+        <div className="space-y-1">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="h-12 animate-pulse rounded-md border bg-muted/40" />
           ))}
         </div>
       ) : null}
 
       {!loading && data && data.rows.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-10 text-center text-muted-foreground">
-          No BOM cards available for workflow control.
+        <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+          No BOM rows available for workflow control.
         </div>
       ) : null}
 
       {data && data.rows.length > 0 ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {data.rows.map((row) => {
-            const hasOpenPo = row.openPoCount > 0;
-            const generating = busyBomId === row.id;
+        <div className="overflow-hidden rounded-md border border-border/70 bg-card">
+          {/* Header */}
+          <div className="hidden lg:grid grid-cols-[160px_1fr_140px_72px_72px_88px_120px_1fr_180px] items-center gap-3 border-b bg-muted/40 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <div>BOM</div>
+            <div>Product</div>
+            <div>SO</div>
+            <div className="text-right">Items</div>
+            <div className="text-right">Sup. Ready</div>
+            <div className="text-right">Open PO</div>
+            <div>Created</div>
+            <div>Linked POs</div>
+            <div className="text-right">Action</div>
+          </div>
 
-            return (
-              <Card key={row.id} className="border-border/70">
-                <CardHeader>
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <CardTitle className="font-mono text-sm">{row.bomCode}</CardTitle>
-                      <CardDescription>v{row.version}</CardDescription>
-                    </div>
-                    <Badge variant={row.isActive ? "success" : "muted"}>{row.isActive ? "Active" : "Inactive"}</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div>
-                    <div className="text-sm font-medium">{row.productName}</div>
-                    <div className="text-xs text-muted-foreground">{row.productSku || "No SKU"}</div>
-                  </div>
+          <ul className="divide-y divide-border/60">
+            {data.rows.map((row) => {
+              const hasOpenPo = row.openPoCount > 0;
+              const generating = busyBomId === row.id;
+              const canGenerate = !hasOpenPo && row.isActive && row.supplierReadyCount > 0;
+              const buttonLabel = hasOpenPo
+                ? "PO Generated"
+                : !row.isActive
+                  ? "Inactive"
+                  : row.supplierReadyCount === 0
+                    ? "Map Supplier"
+                    : "Generate PO";
 
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="rounded-md bg-muted/40 p-2">
-                      <div className="text-muted-foreground">SO</div>
-                      <div className="font-mono">{row.soNumber || "-"}</div>
-                    </div>
-                    <div className="rounded-md bg-muted/40 p-2">
-                      <div className="text-muted-foreground">Items</div>
-                      <div className="font-medium">{row.itemCount}</div>
-                    </div>
-                    <div className="rounded-md bg-muted/40 p-2">
-                      <div className="text-muted-foreground">Open PO</div>
-                      <div className="font-medium">{row.openPoCount}</div>
-                    </div>
-                    <div className="rounded-md bg-muted/40 p-2">
-                      <div className="text-muted-foreground">Supplier Ready</div>
-                      <div className="font-medium">{row.supplierReadyCount}</div>
-                    </div>
-                    <div className="rounded-md bg-muted/40 p-2">
-                      <div className="text-muted-foreground">Created</div>
-                      <div>{formatDate(row.createdAt)}</div>
-                    </div>
+              return (
+                <li
+                  key={row.id}
+                  className="grid grid-cols-1 lg:grid-cols-[160px_1fr_140px_72px_72px_88px_120px_1fr_180px] items-center gap-x-3 gap-y-1 px-3 py-2 text-sm hover:bg-muted/30"
+                >
+                  {/* BOM code + version + active badge */}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-mono text-xs truncate">{row.bomCode}</span>
+                    <span className="text-[10px] text-muted-foreground">v{row.version}</span>
+                    {!row.isActive ? (
+                      <Badge variant="muted" className="h-4 px-1 text-[10px]">Inactive</Badge>
+                    ) : null}
                   </div>
 
-                  {hasOpenPo ? (
-                    <div className="rounded-md border border-border bg-muted/40 px-2 py-2 space-y-1">
-                      <div className="text-xs text-muted-foreground font-medium">Linked Purchase Orders</div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {row.openPos.map((po) => (
+                  {/* Product */}
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{row.productName}</div>
+                    <div className="truncate text-[11px] text-muted-foreground">{row.productSku || "No SKU"}</div>
+                  </div>
+
+                  {/* SO */}
+                  <div className="font-mono text-xs text-muted-foreground truncate">
+                    <span className="lg:hidden text-[10px] uppercase mr-1">SO:</span>
+                    {row.soNumber || "-"}
+                  </div>
+
+                  {/* Items */}
+                  <div className="text-right tabular-nums">
+                    <span className="lg:hidden text-[10px] uppercase mr-1">Items:</span>
+                    {row.itemCount}
+                  </div>
+
+                  {/* Supplier Ready */}
+                  <div
+                    className={`text-right tabular-nums ${
+                      row.supplierReadyCount === 0 ? "text-amber-600" : ""
+                    }`}
+                  >
+                    <span className="lg:hidden text-[10px] uppercase mr-1">Sup:</span>
+                    {row.supplierReadyCount}/{row.itemCount}
+                  </div>
+
+                  {/* Open PO count */}
+                  <div className="text-right tabular-nums">
+                    <span className="lg:hidden text-[10px] uppercase mr-1">Open PO:</span>
+                    <span className={hasOpenPo ? "font-medium text-emerald-600" : "text-muted-foreground"}>
+                      {row.openPoCount}
+                    </span>
+                  </div>
+
+                  {/* Created */}
+                  <div className="text-xs text-muted-foreground tabular-nums truncate">
+                    <span className="lg:hidden text-[10px] uppercase mr-1">Created:</span>
+                    {formatDate(row.createdAt)}
+                  </div>
+
+                  {/* Linked POs (chips) */}
+                  <div className="min-w-0">
+                    {row.openPos.length === 0 ? (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {row.openPos.slice(0, 3).map((po) => (
                           <Link
                             key={po.id}
                             href={`/purchase-orders/${po.id}`}
-                            className="inline-flex items-center gap-1 rounded-sm bg-background border border-border px-2 py-0.5 text-xs font-mono hover:bg-accent transition-colors"
+                            className="inline-flex items-center gap-1 rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[11px] hover:bg-accent"
+                            title={po.poNumber}
                           >
                             {po.poNumber}
                             <ExternalLink className="h-3 w-3 opacity-60" />
                           </Link>
                         ))}
+                        {row.openPos.length > 3 ? (
+                          <span className="text-[11px] text-muted-foreground">+{row.openPos.length - 3}</span>
+                        ) : null}
                       </div>
-                    </div>
-                  ) : null}
+                    )}
+                  </div>
 
-                  <div className="flex gap-2">
+                  {/* Actions */}
+                  <div className="flex items-center justify-end gap-1">
                     <Button
-                      className="flex-1"
+                      size="sm"
+                      variant={canGenerate ? "default" : "outline"}
+                      className="h-7 px-2 text-xs"
                       onClick={() => generatePo(row.id)}
-                      disabled={generating || hasOpenPo || !row.isActive || row.supplierReadyCount === 0}
+                      disabled={generating || !canGenerate}
                     >
-                      {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <PackageCheck className="h-4 w-4" />}
-                      {hasOpenPo ? "PO Generated" : row.supplierReadyCount === 0 ? "Map Supplier Product" : "Generate PO"}
+                      {generating ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <PackageCheck className="h-3.5 w-3.5" />
+                      )}
+                      <span className="ml-1">{buttonLabel}</span>
                     </Button>
-                    <Button variant="outline" asChild>
+                    <Button asChild size="sm" variant="outline" className="h-7 w-7 p-0" title="Open BOM">
                       <Link href={`/boms?highlight=${row.id}`}>
-                        <Layers className="h-4 w-4" />
+                        <Layers className="h-3.5 w-3.5" />
                       </Link>
                     </Button>
                   </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+                </li>
+              );
+            })}
+          </ul>
         </div>
       ) : null}
     </div>
