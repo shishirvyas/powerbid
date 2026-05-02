@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
           supplierProductId: it.supplierProductId ?? null,
           qtyPerUnit: it.qtyPerUnit.toString(),
           unitName: it.unitName,
-          wastagePercent: it.wastagePercent.toString(),
+          unitPrice: it.unitPrice.toString(),
           notes: it.notes,
         })),
       );

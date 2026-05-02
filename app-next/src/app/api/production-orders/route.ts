@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
     const data = await parseJson(req, productionOrderSchema);
 
     const row = await db.transaction(async (tx) => {
-      let bomPlanItems: Array<{ rawMaterialId: number; qtyPerUnit: string; wastagePercent: string }> = [];
+      let bomPlanItems: Array<{ rawMaterialId: number; qtyPerUnit: string; unitPrice: string }> = [];
       if (data.bomId) {
         const [bom] = await tx
           .select({ id: bomMaster.id, productId: bomMaster.productId })
@@ -93,11 +93,11 @@ export async function POST(req: NextRequest) {
           .select({
             rawMaterialId: bomItems.rawMaterialId,
             qtyPerUnit: bomItems.qtyPerUnit,
-            wastagePercent: bomItems.wastagePercent,
+            unitPrice: bomItems.unitPrice,
           })
           .from(bomItems)
           .where(eq(bomItems.bomId, data.bomId))
-        ).filter((it) => it.rawMaterialId != null) as { rawMaterialId: number; qtyPerUnit: string; wastagePercent: string; }[];
+        ).filter((it) => it.rawMaterialId != null) as { rawMaterialId: number; qtyPerUnit: string; unitPrice: string; }[];
       }
 
       const [order] = await tx
@@ -119,11 +119,10 @@ export async function POST(req: NextRequest) {
         await tx.insert(productionConsumption).values(
           bomPlanItems.map((item) => {
             const qty = Number(item.qtyPerUnit) * Number(data.plannedQty || 0);
-            const planned = qty * (1 + Number(item.wastagePercent) / 100);
             return {
               productionId: order.id,
               rawMaterialId: item.rawMaterialId,
-              qtyPlanned: planned.toString(),
+              qtyPlanned: qty.toString(),
               qtyConsumed: "0",
             };
           }),

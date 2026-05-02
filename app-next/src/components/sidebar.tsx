@@ -62,6 +62,7 @@ const navConfig: NavNode[] = [
     children: [
       { label: "Suppliers", href: "/suppliers", icon: Users },
       { label: "BOMs", href: "/boms", icon: FileText },
+      { label: "Workflow Control", href: "/workflow-control", icon: GitBranch },
       { label: "Purchase Orders", href: "/purchase-orders", icon: FileText },
     ],
   },

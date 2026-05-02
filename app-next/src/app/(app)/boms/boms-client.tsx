@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Pencil, Plus, Search, ShieldCheck, Trash2 } from "lucide-react";
+import { Lock, Pencil, Plus, Search, ShieldCheck, Trash2, Unlock } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, EmptyState } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -50,17 +50,16 @@ type BomRow = {
 };
 
 type ProductOption = { id: number; sku: string | null; name: string };
-type SupplierProductOption = { id: number; code: string; name: string; unitName: string | null };
+type SupplierProductOption = { id: number; supplierId: number | null; code: string; name: string; unitName: string | null; standardPrice: string };
 type SalesOrderOption = { id: number; soNumber: string; customerName: string | null };
 
 type BomItemForm = {
-  materialType: "lan" | "supplier";
   rawMaterialId: string;
   rawMaterialQuery: string;
   supplierProductId: string;
   supplierProductQuery: string;
   qtyPerUnit: string;
-  wastagePercent: string;
+  unitPrice: string;
   notes: string;
 };
 
@@ -77,7 +76,7 @@ type BomForm = {
   items: BomItemForm[];
 };
 
-const emptyItem: BomItemForm = { materialType: "supplier", rawMaterialId: "", rawMaterialQuery: "", supplierProductId: "", supplierProductQuery: "", qtyPerUnit: "1", wastagePercent: "0", notes: "" };
+const emptyItem: BomItemForm = { rawMaterialId: "", rawMaterialQuery: "", supplierProductId: "", supplierProductQuery: "", qtyPerUnit: "1", unitPrice: "0", notes: "" };
 
 const emptyForm: BomForm = {
   productId: "",
@@ -105,6 +104,7 @@ export function BomsClient() {
   const [editingId, setEditingId] = React.useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = React.useState<BomRow | null>(null);
   const [form, setForm] = React.useState<BomForm>(emptyForm);
+  const [soLocked, setSoLocked] = React.useState(false);
   const [productQuery, setProductQuery] = React.useState("");
   const [productLookupQuery, setProductLookupQuery] = React.useState("");
   const productLookupQ = useDebounced(productLookupQuery, 250);
@@ -117,6 +117,42 @@ export function BomsClient() {
   const { data: supplierProds } = useList<SupplierProductOption>("/api/supplier-products", { q: spLookupQ, limit: 100 });
   const { data: salesOrdersData } = useList<SalesOrderOption>("/api/sales-orders", { q: soLookupQ, limit: 50 });
   const { data: linkedSoDetail } = useResource<any>(form.soId ? `/api/sales-orders/${form.soId}` : null);
+
+  React.useEffect(() => {
+    if (!dialogOpen) setSoLocked(false);
+  }, [dialogOpen]);
+
+  React.useEffect(() => {
+    // Lock by default when SO is linked, unlock when SO is removed
+    setSoLocked(!!form.soId);
+  }, [form.soId]);
+
+  React.useEffect(() => {
+    if (!form.soId || !linkedSoDetail) return;
+    const firstItem = linkedSoDetail.items?.[0];
+    const inferredProductId = firstItem?.productId ? String(firstItem.productId) : "";
+    const inferredProductQuery = firstItem?.productName || "";
+    const soToken = String(linkedSoDetail.soNumber || form.soQuery || "SO").replace(/[^A-Za-z0-9-]/g, "");
+    const inferredBomCode = `BOM-${soToken}-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}`;
+
+    setForm((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      if (!next.productId && inferredProductId) {
+        next.productId = inferredProductId;
+        changed = true;
+      }
+      if (!next.bomCode.trim()) {
+        next.bomCode = inferredBomCode;
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+
+    if (!productQuery && inferredProductQuery) {
+      setProductQuery(inferredProductQuery);
+    }
+  }, [form.soId, form.soQuery, linkedSoDetail, productQuery]);
 
   React.useEffect(() => {
     setOffset(0);
@@ -163,13 +199,12 @@ export function BomsClient() {
         overheadCost: String(detail.overheadCost ?? "0"),
         notes: detail.notes || "",
         items: (detail.items || []).map((it: any) => ({
-          materialType: it.supplierProductId ? "supplier" : "lan",
           rawMaterialId: it.rawMaterialId ? String(it.rawMaterialId) : "",
-          rawMaterialQuery: it.rawMaterialName || "",
+          rawMaterialQuery: it.rawMaterialName || (it.supplierProductName ? `${it.supplierProductCode || ""} - ${it.supplierProductName}` : ""),
           supplierProductId: it.supplierProductId ? String(it.supplierProductId) : "",
           supplierProductQuery: it.supplierProductName ? `${it.supplierProductCode || ""} - ${it.supplierProductName}` : "",
           qtyPerUnit: String(it.qtyPerUnit),
-          wastagePercent: String(it.wastagePercent),
+          unitPrice: String(it.unitPrice),
           notes: it.notes || "",
         })),
       });
@@ -191,8 +226,7 @@ export function BomsClient() {
       return;
     }
     if (form.items.length === 0 || form.items.some((it) => {
-      if (it.materialType === "lan") return !it.rawMaterialId || Number(it.qtyPerUnit) <= 0;
-      return !it.supplierProductId || Number(it.qtyPerUnit) <= 0;
+      return !it.rawMaterialId || Number(it.qtyPerUnit) <= 0;
     })) {
       toast.error("Add valid BOM items");
       return;
@@ -209,10 +243,10 @@ export function BomsClient() {
       overheadCost: Number(form.overheadCost || 0),
       notes: form.notes || null,
       items: form.items.map((it) => ({
-        rawMaterialId: it.materialType === "lan" && it.rawMaterialId ? Number(it.rawMaterialId) : null,
-        supplierProductId: it.materialType === "supplier" && it.supplierProductId ? Number(it.supplierProductId) : null,
+        rawMaterialId: it.rawMaterialId ? Number(it.rawMaterialId) : null,
+        supplierProductId: it.supplierProductId ? Number(it.supplierProductId) : null,
         qtyPerUnit: Number(it.qtyPerUnit || 0),
-        wastagePercent: Number(it.wastagePercent || 0),
+        unitPrice: Number(it.unitPrice || 0),
         notes: it.notes || null,
       })),
     };
@@ -366,39 +400,41 @@ export function BomsClient() {
 
           <form onSubmit={submitBom} className="space-y-4">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <FormField label="Product" required>
-                <Typeahead
-                  value={form.productId}
-                  inputValue={productQuery}
-                  onInputValueChange={(v) => {
-                    setProductLookupQuery(v);
-                    setProductQuery(v);
-                    setForm((f) => ({ ...f, productId: "" }));
-                  }}
-                  onSelect={(opt) => {
-                    setForm((f) => ({ ...f, productId: opt.value }));
-                    setProductQuery(opt.label);
-                  }}
-                  options={(products?.rows || []).map((p) => ({ value: String(p.id), label: `${p.sku || "NO-SKU"} - ${p.name}` }))}
-                  placeholder="Search product..."
-                />
-              </FormField>
-              <FormField label="BOM Code" required>
-                <Input value={form.bomCode} onChange={(e) => setForm((f) => ({ ...f, bomCode: e.target.value }))} placeholder="e.g. BOM-ASSY-001" />
-              </FormField>
-              <FormField label="Sales Order (optional)">
-                <Typeahead
-                  value={form.soId}
-                  inputValue={form.soQuery}
-                  onInputValueChange={(v) => {
-                    setSoLookupQuery(v);
-                    setForm((f) => ({ ...f, soId: "", soQuery: v }));
-                  }}
-                  onSelect={(opt) => setForm((f) => ({ ...f, soId: opt.value, soQuery: opt.label }))}
-                  options={(salesOrdersData?.rows || []).map((s) => ({ value: String(s.id), label: `${s.soNumber}${s.customerName ? " — " + s.customerName : ""}` }))}
-                  placeholder="Link to SO…"
-                />
-              </FormField>
+              <div className="flex gap-2 items-end">
+                <div className="flex-1">
+                  <FormField label="Sales Order (optional)">
+                    <Typeahead
+                      value={form.soId}
+                      inputValue={form.soQuery}
+                      onInputValueChange={(v) => {
+                        setSoLookupQuery(v);
+                        setForm((f) => ({ ...f, soId: "", soQuery: v, productId: "", bomCode: editingId ? f.bomCode : "" }));
+                        setProductQuery("");
+                      }}
+                      onSelect={(opt) => {
+                        setForm((f) => ({ ...f, soId: opt.value, soQuery: opt.label, productId: "", bomCode: editingId ? f.bomCode : "" }));
+                        setProductQuery("");
+                      }}
+                      options={(salesOrdersData?.rows || []).map((s) => ({ value: String(s.id), label: `${s.soNumber}${s.customerName ? " — " + s.customerName : ""}` }))}
+                      placeholder="Link to SO…"
+                      disabled={soLocked}
+                    />
+                  </FormField>
+                </div>
+                {form.soId && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setSoLocked(!soLocked)}
+                    title={soLocked ? "Unlock to edit" : "Lock to prevent accidental changes"}
+                    className="gap-1"
+                  >
+                    {soLocked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+                    <span className="hidden sm:inline">{soLocked ? "Locked" : "Unlocked"}</span>
+                  </Button>
+                )}
+              </div>
             </div>
 
             {/* SO Items reference panel — shown when an SO is linked */}
@@ -436,6 +472,31 @@ export function BomsClient() {
               </div>
             )}
 
+            {!form.soId ? (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <FormField label="Product" required>
+                  <Typeahead
+                    value={form.productId}
+                    inputValue={productQuery}
+                    onInputValueChange={(v) => {
+                      setProductLookupQuery(v);
+                      setProductQuery(v);
+                      setForm((f) => ({ ...f, productId: "" }));
+                    }}
+                    onSelect={(opt) => {
+                      setForm((f) => ({ ...f, productId: opt.value }));
+                      setProductQuery(opt.label);
+                    }}
+                    options={(products?.rows || []).map((p) => ({ value: String(p.id), label: `${p.sku || "NO-SKU"} - ${p.name}` }))}
+                    placeholder="Search product..."
+                  />
+                </FormField>
+                <FormField label="BOM Code" required>
+                  <Input value={form.bomCode} onChange={(e) => setForm((f) => ({ ...f, bomCode: e.target.value }))} placeholder="e.g. BOM-ASSY-001" />
+                </FormField>
+              </div>
+            ) : null}
+
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <FormField label="Version" required>
                 <Input value={form.version} onChange={(e) => setForm((f) => ({ ...f, version: e.target.value }))} />
@@ -471,71 +532,72 @@ export function BomsClient() {
                 </Button>
               </div>
 
+              {/* Column headers */}
+              <div className="hidden md:grid grid-cols-13 gap-2 px-2 py-1 text-xs font-semibold text-muted-foreground border-b">
+                <div className="md:col-span-3">Raw Material</div>
+                <div className="md:col-span-3">Supplier Product (optional)</div>
+                <div className="md:col-span-2">Qty/Unit</div>
+                <div className="md:col-span-2">Unit Price</div>
+                <div className="md:col-span-2">Notes</div>
+                <div className="md:col-span-1"></div>
+              </div>
+
               {form.items.map((it, idx) => (
-                <div key={idx} className="grid grid-cols-1 gap-2 rounded-md border bg-muted/30 p-2 md:grid-cols-12">
-                  {/* Material type toggle */}
-                  <div className="md:col-span-2">
-                    <select
-                      className="h-10 w-full rounded-md border bg-background px-2 text-sm"
-                      value={it.materialType}
-                      onChange={(e) =>
+                <div key={idx} className="grid grid-cols-1 gap-2 rounded-md border bg-muted/30 p-2 md:grid-cols-13">
+                  <div className="md:col-span-3">
+                    <Typeahead
+                      value={it.rawMaterialId}
+                      inputValue={it.rawMaterialQuery}
+                      onInputValueChange={(v) => {
+                        setProductLookupQuery(v);
                         setForm((f) => {
                           const items = [...f.items];
-                          items[idx] = { ...items[idx], materialType: e.target.value as "lan" | "supplier", rawMaterialId: "", rawMaterialQuery: "", supplierProductId: "", supplierProductQuery: "" };
+                          items[idx] = { ...items[idx], rawMaterialId: "", rawMaterialQuery: v };
+                          return { ...f, items };
+                        });
+                      }}
+                      onSelect={(opt) =>
+                        setForm((f) => {
+                          const items = [...f.items];
+                          items[idx] = { ...items[idx], rawMaterialId: opt.value, rawMaterialQuery: opt.label };
                           return { ...f, items };
                         })
                       }
-                    >
-                      <option value="supplier">Supplier Product</option>
-                      <option value="lan">LAN Product</option>
-                    </select>
+                      options={(products?.rows || []).map((p) => ({ value: String(p.id), label: `${p.sku || "NO-SKU"} - ${p.name}` }))}
+                      placeholder="Search LAN product…"
+                    />
                   </div>
-                  <div className="md:col-span-4">
-                    {it.materialType === "supplier" ? (
-                      <Typeahead
-                        value={it.supplierProductId}
-                        inputValue={it.supplierProductQuery}
-                        onInputValueChange={(v) => {
-                          setSpLookupQuery(v);
-                          setForm((f) => {
-                            const items = [...f.items];
-                            items[idx] = { ...items[idx], supplierProductId: "", supplierProductQuery: v };
-                            return { ...f, items };
-                          });
-                        }}
-                        onSelect={(opt) =>
-                          setForm((f) => {
-                            const items = [...f.items];
-                            items[idx] = { ...items[idx], supplierProductId: opt.value, supplierProductQuery: opt.label };
-                            return { ...f, items };
-                          })
-                        }
-                        options={(supplierProds?.rows || []).map((p) => ({ value: String(p.id), label: `${p.code} - ${p.name}` }))}
-                        placeholder="Search supplier product…"
-                      />
-                    ) : (
-                      <Typeahead
-                        value={it.rawMaterialId}
-                        inputValue={it.rawMaterialQuery}
-                        onInputValueChange={(v) => {
-                          setProductLookupQuery(v);
-                          setForm((f) => {
-                            const items = [...f.items];
-                            items[idx] = { ...items[idx], rawMaterialId: "", rawMaterialQuery: v };
-                            return { ...f, items };
-                          });
-                        }}
-                        onSelect={(opt) =>
-                          setForm((f) => {
-                            const items = [...f.items];
-                            items[idx] = { ...items[idx], rawMaterialId: opt.value, rawMaterialQuery: opt.label };
-                            return { ...f, items };
-                          })
-                        }
-                        options={(products?.rows || []).map((p) => ({ value: String(p.id), label: `${p.sku || "NO-SKU"} - ${p.name}` }))}
-                        placeholder="Search LAN product…"
-                      />
-                    )}
+                  <div className="md:col-span-3">
+                    <Typeahead
+                      value={it.supplierProductId}
+                      inputValue={it.supplierProductQuery}
+                      onInputValueChange={(v) => {
+                        setSpLookupQuery(v);
+                        setForm((f) => {
+                          const items = [...f.items];
+                          items[idx] = { ...items[idx], supplierProductId: "", supplierProductQuery: v };
+                          return { ...f, items };
+                        });
+                      }}
+                      onSelect={(opt) =>
+                        setForm((f) => {
+                          const items = [...f.items];
+                          const selected = (supplierProds?.rows || []).find((p) => String(p.id) === opt.value);
+                          items[idx] = {
+                            ...items[idx],
+                            supplierProductId: opt.value,
+                            supplierProductQuery: opt.label,
+                            unitPrice:
+                              Number(items[idx].unitPrice || 0) > 0
+                                ? items[idx].unitPrice
+                                : String(selected?.standardPrice || items[idx].unitPrice || "0"),
+                          };
+                          return { ...f, items };
+                        })
+                      }
+                      options={(supplierProds?.rows || []).map((p) => ({ value: String(p.id), label: `${p.code} - ${p.name}` }))}
+                      placeholder="Map supplier product…"
+                    />
                   </div>
                   <div className="md:col-span-2">
                     <Input
@@ -557,16 +619,16 @@ export function BomsClient() {
                     <Input
                       type="number"
                       min="0"
-                      max="100"
-                      value={it.wastagePercent}
+                      step="0.01"
+                      value={it.unitPrice}
                       onChange={(e) =>
                         setForm((f) => {
                           const items = [...f.items];
-                          items[idx] = { ...items[idx], wastagePercent: e.target.value };
+                          items[idx] = { ...items[idx], unitPrice: e.target.value };
                           return { ...f, items };
                         })
                       }
-                      placeholder="Wastage %"
+                      placeholder="Unit Price"
                     />
                   </div>
                   <div className="md:col-span-2">

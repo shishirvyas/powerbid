@@ -179,7 +179,7 @@ export const bomItemSchema = z.object({
   supplierProductName: optionalString,
   qtyPerUnit: z.coerce.number().positive(),
   unitName: optionalString,
-  wastagePercent: z.coerce.number().min(0).max(100).default(0),
+  unitPrice: z.coerce.number().min(0).default(0),
   notes: optionalString,
 });
 

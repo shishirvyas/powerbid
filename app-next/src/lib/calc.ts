@@ -172,7 +172,7 @@ export type BomRollupLine = {
   rawMaterialId: number;
   rawMaterialName: string;
   qtyPerUnit: number;
-  wastagePercent: number;
+  unitPrice: number;
   estimatedRate: number;
   lineCost: number;
 };
@@ -182,7 +182,7 @@ export function calcBomRollup(input: {
     rawMaterialId: number;
     rawMaterialName: string;
     qtyPerUnit: number;
-    wastagePercent: number;
+    unitPrice: number;
     estimatedRate: number;
   }>;
   laborCost: number;
@@ -190,15 +190,14 @@ export function calcBomRollup(input: {
 }) {
   const lines: BomRollupLine[] = input.lines.map((line) => {
     const qty = Number(line.qtyPerUnit) || 0;
-    const wastageFactor = 1 + (Number(line.wastagePercent) || 0) / 100;
-    const rate = Number(line.estimatedRate) || 0;
-    const lineCost = round(qty * wastageFactor * rate);
+    const price = Number(line.unitPrice) || Number(line.estimatedRate) || 0;
+    const lineCost = round(qty * price);
     return {
       rawMaterialId: line.rawMaterialId,
       rawMaterialName: line.rawMaterialName,
       qtyPerUnit: qty,
-      wastagePercent: Number(line.wastagePercent) || 0,
-      estimatedRate: rate,
+      unitPrice: Number(line.unitPrice) || 0,
+      estimatedRate: Number(line.estimatedRate) || 0,
       lineCost,
     };
   });

@@ -671,7 +671,7 @@ export const bomItems = pgTable(
     supplierProductId: integer("supplier_product_id").references(() => supplierProducts.id, { onDelete: "set null" }),
     qtyPerUnit: numeric("qty_per_unit", { precision: 14, scale: 4 }).notNull(),
     unitName: text("unit_name"),
-    wastagePercent: numeric("wastage_percent", { precision: 5, scale: 2 }).notNull().default("0"),
+    unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull().default("0"),
     notes: text("notes"),
   },
   (t) => ({
